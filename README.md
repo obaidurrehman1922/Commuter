@@ -25,11 +25,9 @@ times by weekday and departure time.
    In the [Google Cloud console](https://console.cloud.google.com/), create a project, attach
    billing, enable the **Routes API**, and create an API key under *APIs & Services →
    Credentials*. Restrict the key to the Routes API.
-3. **Add the key to GitHub.** In the repo, open *Settings → Environments* and create an
-   environment named `commute`. If you use a different name, change `environment:`
-   in `.github/workflows/commute.yml` to match. Add an environment secret called
-   `GOOGLE_MAPS_API_KEY` containing the key. Don't add required reviewers or a wait timer
-   to the environment: every scheduled run would wait for them.
+3. **Add the key to GitHub.** In the repo, open *Settings → Secrets and variables →
+   Actions* and click *New repository secret*. Name it `GOOGLE_MAPS_API_KEY` and paste
+   the key as the value.
 4. **Push to the default branch.** Scheduled workflows only run from the default branch.
 5. **Check that it works.** During a commute window, open *Actions → Commute tracker →
    Run workflow*. The *Record commute time* step should log `Recorded 1 of 1 live trip(s)`,
@@ -102,8 +100,8 @@ The congestion index in the report is `duration_s / static_s`: 1.5 means the dri
 
 ## Troubleshooting
 
-- **A run fails with `GOOGLE_MAPS_API_KEY is not set`.** Check the secret name and the
-  environment name in the workflow.
+- **A run fails with `GOOGLE_MAPS_API_KEY is not set`.** Check that the repository secret
+  is named exactly `GOOGLE_MAPS_API_KEY`.
 - **API errors don't fail the run.** A failed request is retried up to 3 times on
   429/5xx/network errors. After that the error is logged and the run still succeeds,
   so one bad call never loses a run. As a result, a wrong or restricted key only shows up

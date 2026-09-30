@@ -1,6 +1,7 @@
 # Commute tracker
 
-Finds the best time to leave for the daily drive between Chah Miran and the office in Lahore.
+Finds the best time to leave for the daily drive between home (Shayyan Furniture, Chah Miran)
+and the office (04 Old FCC Road) in Lahore.
 A GitHub Actions job asks the Google Routes API for the drive time with live traffic every
 15 minutes during the commute windows and stores each result in `commute.db` (SQLite), which
 is committed back to this repo. A report turns the data into a heatmap of median drive
@@ -16,9 +17,10 @@ times by weekday and departure time.
 
 ## Setup
 
-1. **Set the office address.** Replace the `OFFICE ADDRESS` placeholder in the `OFFICE`
-   setting at the top of `commute_tracker.py`. The windows, slot length, workdays and
-   time zone are set in the same place.
+1. **Check the addresses.** `HOME` and `OFFICE` are at the top of `commute_tracker.py`,
+   along with the windows, slot length, workdays and time zone. After the first run, check
+   that the distance in the log matches the route in Google Maps. If Google placed an
+   address in the wrong spot, make the address more specific.
 2. **Get a Google Maps API key.**
    In the [Google Cloud console](https://console.cloud.google.com/), create a project, attach
    billing, enable the **Routes API**, and create an API key under *APIs & Services →

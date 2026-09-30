@@ -29,8 +29,8 @@ import requests
 # --------------------------------------------------------------------------
 # Settings
 # --------------------------------------------------------------------------
-HOME = "Chah Miran, Lahore, Pakistan"
-OFFICE = "OFFICE ADDRESS, Lahore, Pakistan"
+HOME = "Shayyan Furniture, Chah Miran, Lahore, Pakistan"
+OFFICE = "04 Old FCC Road, Lahore, Pakistan"
 
 TZ = ZoneInfo("Asia/Karachi")
 MORNING_WINDOW = (dtime(7, 0), dtime(10, 30))  # home -> office
@@ -379,7 +379,7 @@ def cmd_report(source: str) -> int:
         )
         fig.colorbar(image, ax=ax, label="minutes", pad=0.01)
 
-    fig.suptitle(f"Commute times, {HOME.split(',')[0]} ↔ office", fontsize=13, x=0.01, ha="left")
+    fig.suptitle(f"Commute times: {HOME.split(',')[0]} ↔ {OFFICE.split(',')[0]}", fontsize=13, x=0.01, ha="left")
     fig.savefig(HEATMAP_PATH, dpi=120)
     plt.close(fig)
     log.info("Saved heatmap to %s", HEATMAP_PATH)

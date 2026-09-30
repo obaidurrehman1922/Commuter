@@ -26,7 +26,7 @@ times by weekday and departure time.
    billing, enable the **Routes API**, and create an API key under *APIs & Services →
    Credentials*. Restrict the key to the Routes API.
 3. **Add the key to GitHub.** In the repo, open *Settings → Environments* and create an
-   environment named `ENVIRONMENT NAME`. If you use a different name, change `environment:`
+   environment named `commute`. If you use a different name, change `environment:`
    in `.github/workflows/commute.yml` to match. Add an environment secret called
    `GOOGLE_MAPS_API_KEY` containing the key. Don't add required reviewers or a wait timer
    to the environment: every scheduled run would wait for them.

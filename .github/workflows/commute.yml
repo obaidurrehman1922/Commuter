@@ -17,7 +17,7 @@ concurrency:
 jobs:
   poll:
     runs-on: ubuntu-latest
-    environment: ENVIRONMENT NAME
+    environment: commute
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5

@@ -1,0 +1,440 @@
+#!/usr/bin/env python3
+"""Commute traffic tracker for Lahore.
+
+Records driving times with live traffic (Google Routes API) into SQLite and
+builds a heatmap showing the best time to leave.
+
+Commands:
+    poll [--force]                       record live traffic for the current window
+    predict                              record predicted traffic for the next week
+    report [--source live|predicted|all] build commute_heatmap.png and print a summary
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import math
+import os
+import sqlite3
+import sys
+import time
+from contextlib import closing
+from datetime import date, datetime, time as dtime, timedelta, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import requests
+
+# --------------------------------------------------------------------------
+# Settings
+# --------------------------------------------------------------------------
+HOME = "Chah Miran, Lahore, Pakistan"
+OFFICE = "OFFICE ADDRESS, Lahore, Pakistan"
+
+TZ = ZoneInfo("Asia/Karachi")
+MORNING_WINDOW = (dtime(7, 0), dtime(10, 30))  # home -> office
+EVENING_WINDOW = (dtime(16, 30), dtime(21, 0))  # office -> home
+SLOT_MINUTES = 15
+WORKDAYS = {0, 1, 2, 3, 4}  # Mon-Fri (Monday = 0)
+PREDICT_DAYS = 7
+
+MAX_RETRIES = 3  # extra attempts after the first on 429/5xx/network errors
+BACKOFF_SECONDS = 2  # doubled after every retry: 2s, 4s, 8s
+REQUEST_TIMEOUT = 30
+
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / "commute.db"
+HEATMAP_PATH = BASE_DIR / "commute_heatmap.png"
+
+ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
+FIELD_MASK = "routes.duration,routes.staticDuration,routes.distanceMeters,routes.description"
+
+# direction -> (origin, destination, window)
+DIRECTIONS = {
+    "to_office": (HOME, OFFICE, MORNING_WINDOW),
+    "to_home": (OFFICE, HOME, EVENING_WINDOW),
+}
+DIRECTION_LABELS = {"to_office": "Home → Office", "to_home": "Office → Home"}
+WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+log = logging.getLogger("commute")
+
+
+# --------------------------------------------------------------------------
+# Time helpers
+# --------------------------------------------------------------------------
+def now_local() -> datetime:
+    return datetime.now(TZ)
+
+
+def floor_to_slot(dt: datetime) -> datetime:
+    return dt.replace(minute=dt.minute - dt.minute % SLOT_MINUTES, second=0, microsecond=0)
+
+
+def window_slots(day: date, window: tuple[dtime, dtime]) -> list[datetime]:
+    """All departure slots in a window on a given day, both ends included."""
+    start, end = window
+    slot = datetime.combine(day, start, tzinfo=TZ)
+    last = datetime.combine(day, end, tzinfo=TZ)
+    slots = []
+    while slot <= last:
+        slots.append(slot)
+        slot += timedelta(minutes=SLOT_MINUTES)
+    return slots
+
+
+def active_direction(now: datetime) -> str | None:
+    """Direction whose window contains the current slot on a workday, else None.
+
+    The current time is floored to its slot first: scheduled GitHub runs often
+    start a few minutes late, and a run at 10:37 should still count as 10:30.
+    """
+    if now.weekday() not in WORKDAYS:
+        return None
+    slot = floor_to_slot(now).time()
+    for direction, (_, _, (start, end)) in DIRECTIONS.items():
+        if start <= slot <= end:
+            return direction
+    return None
+
+
+def rfc3339_utc(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# --------------------------------------------------------------------------
+# Google Routes API
+# --------------------------------------------------------------------------
+def get_api_key() -> str:
+    key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    if not key:
+        log.error("GOOGLE_MAPS_API_KEY is not set")
+        sys.exit(1)
+    return key
+
+
+def parse_seconds(value: str | None) -> int | None:
+    # The API returns durations as strings like "1534s".
+    if not value:
+        return None
+    return round(float(value.rstrip("s")))
+
+
+def error_message(resp: requests.Response) -> str:
+    try:
+        error = resp.json()["error"]
+        return f"{error.get('status', '')} {error.get('message', '')}".strip()
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return " ".join(resp.text.split())[:300]
+
+
+def compute_route(
+    session: requests.Session,
+    api_key: str,
+    origin: str,
+    destination: str,
+    departure: datetime | None = None,
+) -> dict | None:
+    """Call computeRoutes and return the first route, or None on failure."""
+    body = {
+        "origin": {"address": origin},
+        "destination": {"address": destination},
+        "travelMode": "DRIVE",
+        "routingPreference": "TRAFFIC_AWARE",
+    }
+    if departure is not None:
+        body["departureTime"] = rfc3339_utc(departure)
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": FIELD_MASK,
+    }
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            resp = session.post(ROUTES_URL, json=body, headers=headers, timeout=REQUEST_TIMEOUT)
+        except requests.RequestException as exc:
+            error = f"network error: {exc}"
+        else:
+            if resp.ok:
+                routes = resp.json().get("routes") or []
+                if not routes:
+                    log.warning("No route returned for %s -> %s", origin, destination)
+                    return None
+                route = routes[0]
+                return {
+                    "duration_s": parse_seconds(route.get("duration")),
+                    "static_s": parse_seconds(route.get("staticDuration")),
+                    "distance_m": route.get("distanceMeters"),
+                    "via": route.get("description"),
+                }
+            error = f"HTTP {resp.status_code}: {error_message(resp)}"
+            if resp.status_code != 429 and resp.status_code < 500:
+                log.error("Routes API request failed: %s", error)
+                return None
+
+        if attempt < MAX_RETRIES:
+            delay = BACKOFF_SECONDS * 2**attempt
+            log.warning("Routes API %s; retrying in %ss (%d/%d)", error, delay, attempt + 1, MAX_RETRIES)
+            time.sleep(delay)
+        else:
+            log.error("Routes API %s; giving up after %d attempts", error, MAX_RETRIES + 1)
+    return None
+
+
+# --------------------------------------------------------------------------
+# Storage
+# --------------------------------------------------------------------------
+def open_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trips (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            recorded_at TEXT NOT NULL,
+            depart_at   TEXT NOT NULL,
+            direction   TEXT NOT NULL,
+            source      TEXT NOT NULL,
+            duration_s  INTEGER,
+            static_s    INTEGER,
+            distance_m  INTEGER,
+            via         TEXT
+        )
+        """
+    )
+    return conn
+
+
+def save_trip(conn: sqlite3.Connection, depart_at: datetime, direction: str, source: str, route: dict) -> None:
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO trips (recorded_at, depart_at, direction, source, duration_s, static_s, distance_m, via)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                now_local().isoformat(timespec="seconds"),
+                depart_at.isoformat(timespec="seconds"),
+                direction,
+                source,
+                route["duration_s"],
+                route["static_s"],
+                route["distance_m"],
+                route["via"],
+            ),
+        )
+
+
+def record(
+    conn: sqlite3.Connection,
+    session: requests.Session,
+    api_key: str,
+    direction: str,
+    source: str,
+    depart_at: datetime,
+    departure: datetime | None,
+) -> bool:
+    """Fetch and store one trip. Never raises, so one bad call can't stop a run."""
+    origin, destination, _ = DIRECTIONS[direction]
+    try:
+        route = compute_route(session, api_key, origin, destination, departure)
+        if route is None or route["duration_s"] is None:
+            return False
+        save_trip(conn, depart_at, direction, source, route)
+    except Exception:
+        log.exception("Failed to record %s %s trip departing %s", source, direction, depart_at)
+        return False
+    log.info(
+        "%s %s %s: %.1f min (no traffic %.1f min), %.1f km via %s",
+        source,
+        direction,
+        depart_at.strftime("%a %Y-%m-%d %H:%M"),
+        route["duration_s"] / 60,
+        (route["static_s"] or 0) / 60,
+        (route["distance_m"] or 0) / 1000,
+        route["via"] or "?",
+    )
+    return True
+
+
+# --------------------------------------------------------------------------
+# Commands
+# --------------------------------------------------------------------------
+def cmd_poll(force: bool) -> int:
+    now = now_local()
+    if force:
+        directions = list(DIRECTIONS)
+    else:
+        direction = active_direction(now)
+        if direction is None:
+            log.info("%s is outside the commute windows; nothing to record", now.strftime("%a %H:%M"))
+            return 0
+        directions = [direction]
+
+    api_key = get_api_key()
+    saved = 0
+    with closing(open_db()) as conn, requests.Session() as session:
+        for direction in directions:
+            saved += record(conn, session, api_key, direction, "live", now, None)
+    log.info("Recorded %d of %d live trip(s)", saved, len(directions))
+    return 0
+
+
+def cmd_predict() -> int:
+    now = now_local()
+    earliest = now + timedelta(minutes=1)  # departureTime must be in the future
+    horizon = now + timedelta(days=PREDICT_DAYS)
+
+    jobs = []
+    for offset in range(PREDICT_DAYS + 1):
+        day = now.date() + timedelta(days=offset)
+        if day.weekday() not in WORKDAYS:
+            continue
+        for direction, (_, _, window) in DIRECTIONS.items():
+            jobs += [(direction, s) for s in window_slots(day, window) if earliest <= s <= horizon]
+    jobs.sort(key=lambda job: job[1])
+
+    if not jobs:
+        log.info("No workday slots in the next %d days", PREDICT_DAYS)
+        return 0
+
+    api_key = get_api_key()
+    log.info("Requesting %d predicted trips up to %s", len(jobs), horizon.strftime("%a %Y-%m-%d %H:%M"))
+    saved = 0
+    with closing(open_db()) as conn, requests.Session() as session:
+        for direction, slot in jobs:
+            saved += record(conn, session, api_key, direction, "predicted", slot, slot)
+    log.info("Recorded %d of %d predicted trip(s)", saved, len(jobs))
+    return 0
+
+
+def cmd_report(source: str) -> int:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    if not DB_PATH.exists():
+        log.error("No database at %s yet; run poll or predict first", DB_PATH)
+        return 1
+
+    query = "SELECT depart_at, direction, source, duration_s, static_s, via FROM trips WHERE duration_s IS NOT NULL"
+    params: tuple = ()
+    if source != "all":
+        query += " AND source = ?"
+        params = (source,)
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        df = pd.read_sql_query(query, conn, params=params)
+    if df.empty:
+        log.error("No trips for --source %s in %s", source, DB_PATH)
+        return 1
+
+    depart = pd.to_datetime(df["depart_at"], utc=True).dt.tz_convert(TZ)
+    df["weekday"] = depart.dt.weekday
+    df["slot"] = depart.dt.floor(f"{SLOT_MINUTES}min").dt.strftime("%H:%M")
+    df["minutes"] = df["duration_s"] / 60
+    df["congestion"] = df["duration_s"] / df["static_s"].where(df["static_s"] > 0)
+
+    directions = [d for d in DIRECTIONS if d in set(df["direction"])]
+    fig, axes = plt.subplots(
+        len(directions), 1, figsize=(15, 3.2 * len(directions) + 1), squeeze=False, layout="constrained"
+    )
+    cmap = plt.get_cmap("RdYlGn_r")
+
+    for ax, direction in zip(axes[:, 0], directions):
+        sub = df[df["direction"] == direction]
+        window = DIRECTIONS[direction][2]
+        slots = sorted({s.strftime("%H:%M") for s in window_slots(now_local().date(), window)} | set(sub["slot"]))
+        days = sorted(WORKDAYS | set(sub["weekday"]))
+        grid = sub.pivot_table(index="weekday", columns="slot", values="minutes", aggfunc="median")
+        grid = grid.reindex(index=days, columns=slots)
+
+        values = grid.to_numpy(dtype=float)
+        vmin, vmax = sub["minutes"].min(), sub["minutes"].max()
+        if vmin == vmax:
+            vmin, vmax = vmin - 1, vmax + 1
+        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+        image = ax.imshow(values, cmap=cmap, norm=norm, aspect="auto")
+
+        ax.set_xticks(range(len(slots)), slots, rotation=45, ha="right", fontsize=9)
+        ax.set_yticks(range(len(days)), [WEEKDAY_NAMES[d] for d in days])
+        ax.tick_params(length=0)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        for y in range(values.shape[0]):
+            for x in range(values.shape[1]):
+                value = values[y, x]
+                if pd.isna(value):
+                    continue
+                r, g, b, _ = cmap(norm(value))
+                text_color = "black" if 0.299 * r + 0.587 * g + 0.114 * b > 0.5 else "white"
+                ax.text(x, y, f"{value:.0f}", ha="center", va="center", fontsize=8, color=text_color)
+
+        ax.set_title(
+            f"{DIRECTION_LABELS[direction]}: median minutes by departure time ({source}, {len(sub)} trips)",
+            loc="left",
+            fontsize=11,
+        )
+        fig.colorbar(image, ax=ax, label="minutes", pad=0.01)
+
+    fig.suptitle(f"Commute times, {HOME.split(',')[0]} ↔ office", fontsize=13, x=0.01, ha="left")
+    fig.savefig(HEATMAP_PATH, dpi=120)
+    plt.close(fig)
+    log.info("Saved heatmap to %s", HEATMAP_PATH)
+
+    for direction in directions:
+        print_summary(df[df["direction"] == direction], direction, source)
+    return 0
+
+
+def print_summary(sub, direction: str, source: str) -> None:
+    stats = (
+        sub.groupby("slot")["minutes"]
+        .agg(median="median", p90=lambda m: m.quantile(0.9), n="count")
+        .sort_values(["median", "p90"])
+    )
+    best = stats.head(3)
+    worst_slot, worst = stats["median"].idxmax(), stats.loc[stats["median"].idxmax()]
+    congestion = sub["congestion"].mean()
+    routes = sub["via"].fillna("(no description)").value_counts().head(3)
+
+    print()
+    print(f"=== {DIRECTION_LABELS[direction]} ({source}, {len(sub)} trips) ===")
+    print("Best departure slots:")
+    for slot, row in best.iterrows():
+        print(f"  {slot}  median {row['median']:5.1f} min   p90 {row['p90']:5.1f} min   (n={row['n']:.0f})")
+    print(f"Worst slot:   {worst_slot}  median {worst['median']:5.1f} min   p90 {worst['p90']:5.1f} min   (n={worst['n']:.0f})")
+    if not math.isnan(congestion):
+        print(f"Average congestion index: {congestion:.2f}x the no-traffic time")
+    print("Most common routes:")
+    for via, count in routes.items():
+        print(f"  {count / len(sub):4.0%}  via {via}")
+
+
+# --------------------------------------------------------------------------
+# Entry point
+# --------------------------------------------------------------------------
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Record and analyse Lahore commute times.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    poll = commands.add_parser("poll", help="record live traffic if inside a commute window")
+    poll.add_argument("--force", action="store_true", help="record both directions regardless of time")
+    commands.add_parser("predict", help=f"record predicted traffic for the next {PREDICT_DAYS} days")
+    report = commands.add_parser("report", help="build the heatmap and print a summary")
+    report.add_argument("--source", choices=["live", "predicted", "all"], default="live")
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+
+    if args.command == "poll":
+        return cmd_poll(args.force)
+    if args.command == "predict":
+        return cmd_predict()
+    return cmd_report(args.source)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

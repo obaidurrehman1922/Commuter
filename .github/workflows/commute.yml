@@ -1,0 +1,48 @@
+name: Commute tracker
+
+on:
+  schedule:
+    # Times are UTC; Lahore is UTC+5. The script skips runs outside its windows.
+    - cron: "*/15 2-5 * * 1-5"   # 07:00-10:45 Lahore, home -> office
+    - cron: "*/15 11-16 * * 1-5" # 16:00-21:45 Lahore, office -> home
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: commute-tracker
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    environment: ENVIRONMENT NAME
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Record commute time
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+        run: python commute_tracker.py poll
+
+      - name: Commit database
+        run: |
+          git add commute.db 2>/dev/null || exit 0
+          if git diff --cached --quiet; then
+            echo "commute.db unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Record commute times $(date -u +'%Y-%m-%d %H:%M') UTC"
+          git pull --rebase
+          git push

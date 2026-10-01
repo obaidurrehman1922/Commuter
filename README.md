@@ -4,8 +4,9 @@ Finds the best time to leave for the daily drive between home (Shayyan Furniture
 and the office (04 Old FCC Road) in Lahore.
 A GitHub Actions job asks the Google Routes API for the drive time with live traffic every
 15 minutes during the commute windows and stores each result in `commute.db` (SQLite), which
-is committed back to this repo. A report turns the data into a heatmap of median drive
-times by weekday and departure time.
+is committed back to this repo. After each new trip the workflow rebuilds an interactive
+dashboard and publishes it with GitHub Pages at
+<https://obaidurrehman1922.github.io/Commuter/>.
 
 | Direction | Window (Lahore time, Mon–Fri) |
 |---|---|
@@ -29,10 +30,25 @@ times by weekday and departure time.
    Actions* and click *New repository secret*. Name it `GOOGLE_MAPS_API_KEY` and paste
    the key as the value.
 4. **Push to the default branch.** Scheduled workflows only run from the default branch.
-5. **Check that it works.** During a commute window, open *Actions → Commute tracker →
-   Run workflow*. The *Record commute time* step should log `Recorded 1 of 1 live trip(s)`,
-   and a `Record commute times …` commit should appear. Outside the windows the run logs
-   `outside the commute windows` and does nothing.
+5. **Turn on GitHub Pages.** Open *Settings → Pages* and under *Build and deployment* set
+   *Source* to **GitHub Actions**. On a free GitHub plan, Pages only works while the repo
+   is public.
+6. **Check that it works.** Open *Actions → Commute tracker → Run workflow*. During a
+   commute window the *Record commute time* step logs `Recorded 1 of 1 live trip(s)` and a
+   `Record commute times …` commit appears; outside the windows it logs
+   `outside the commute windows`. Either way, a manual run also publishes the dashboard,
+   and the *pages* job shows its link.
+
+### Dashboard website
+
+The `pages` job runs after every run that recorded a trip, and after every manual run. It
+builds `commute_dashboard.html` from `commute.db` and publishes it as the site's front page,
+so the dashboard is never more than one trip behind. Nothing is committed for this; the page
+is uploaded straight to GitHub Pages.
+
+The site is public: anyone with the link can see your drive times, departure times and the
+roads Google chose. It doesn't include your addresses, and it asks search engines not to
+index it.
 
 The workflow's cron schedule is in UTC (Lahore is UTC+5) and fires every 15 minutes from
 07:00 to 10:45 and from 16:00 to 21:45 Lahore time. The script skips any run outside the

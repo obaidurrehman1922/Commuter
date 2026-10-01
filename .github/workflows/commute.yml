@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: commute-tracker
@@ -18,6 +18,10 @@ jobs:
   poll:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
     steps:
       - uses: actions/checkout@v5
 
@@ -34,10 +38,11 @@ jobs:
         run: python commute_tracker.py poll
 
       - name: Commit database
+        id: commit
         run: |
-          git add commute.db 2>/dev/null || exit 0
-          if git diff --cached --quiet; then
+          if ! git add commute.db 2>/dev/null || git diff --cached --quiet; then
             echo "commute.db unchanged"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -45,3 +50,43 @@ jobs:
           git commit -m "Record commute times $(date -u +'%Y-%m-%d %H:%M') UTC"
           git pull --rebase
           git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+  # Rebuilds the dashboard website after every new trip (and on every manual run).
+  pages:
+    needs: poll
+    if: needs.poll.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }} # the branch tip, including the commit just made by poll
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Build dashboard
+        run: |
+          python commute_tracker.py dashboard
+          mkdir _site
+          cp commute_dashboard.html _site/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Publish to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

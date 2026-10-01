@@ -460,7 +460,11 @@ def cmd_dashboard() -> int:
     # "</" is escaped so a route description can never close the <script> tag early.
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     page = template.replace(DASHBOARD_DATA_MARKER, payload, 1)
-    head = '<!doctype html>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+    head = (
+        '<!doctype html>\n<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        '<meta name="robots" content="noindex, nofollow">\n'  # keep the public Pages copy out of search engines
+    )
     DASHBOARD_PATH.write_text(head + page, encoding="utf-8")
     log.info("Saved dashboard with %d trips to %s", len(trips), DASHBOARD_PATH)
     return 0

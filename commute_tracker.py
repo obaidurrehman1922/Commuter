@@ -38,6 +38,9 @@ EVENING_WINDOW = (dtime(16, 30), dtime(21, 0))  # office -> home
 SLOT_MINUTES = 15
 WORKDAYS = {0, 1, 2, 3, 4}  # Mon-Fri (Monday = 0)
 PREDICT_DAYS = 7
+# TRAFFIC_AWARE_OPTIMAL is Google's most accurate traffic mode; TRAFFIC_AWARE skips some of
+# the traffic calculation to answer faster. Both are billed at the same (Pro) rate.
+ROUTING_PREFERENCE = "TRAFFIC_AWARE_OPTIMAL"
 
 MAX_RETRIES = 3  # extra attempts after the first on 429/5xx/network errors
 BACKOFF_SECONDS = 2  # doubled after every retry: 2s, 4s, 8s
@@ -141,7 +144,7 @@ def compute_route(
         "origin": {"address": origin},
         "destination": {"address": destination},
         "travelMode": "DRIVE",
-        "routingPreference": "TRAFFIC_AWARE",
+        "routingPreference": ROUTING_PREFERENCE,
     }
     if departure is not None:
         body["departureTime"] = rfc3339_utc(departure)

@@ -90,8 +90,10 @@ The congestion index in the report is `duration_s / static_s`: 1.5 means the dri
 ## Costs and limits
 
 - **Routes API.** Scheduled polling makes about 34 calls per workday (around 750 a
-  month), and each `predict` run makes about 170. Traffic-aware routing is billed at a
-  higher rate than basic routing, so check the current
+  month), and each `predict` run makes about 170. Requests use `TRAFFIC_AWARE_OPTIMAL`,
+  Google's most accurate traffic mode (set by `ROUTING_PREFERENCE` in the script). It is
+  billed at the Routes API's Pro rate, the same as `TRAFFIC_AWARE`, which is higher than
+  basic routing. Check the current
   [Google Maps Platform pricing](https://developers.google.com/maps/billing-and-pricing/pricing)
   and its free monthly allowance.
 - **GitHub Actions minutes.** Private repos get a limited number of free minutes a month,

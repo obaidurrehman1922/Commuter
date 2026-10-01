@@ -1,0 +1,984 @@
+<title>When to Leave</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&display=swap">
+<style>
+/* Layout: one column of panels on a slate ground: filters, summary row (hero + four tiles),
+   departure-time profile, week heatmap, then daily trend beside routes, then the trips table.
+   Barlow (road-signage lineage) carries headings and figures; the system sans carries everything else. */
+:root {
+  --bg: #f1f3f5;
+  --surface: #fcfdfd;
+  --surface-2: #e9edf1;
+  --ink: #0f151b;
+  --ink-2: #4a5561;
+  --muted: #76818d;
+  --grid: #e1e5e9;
+  --axis: #c2cad2;
+  --border: rgba(15, 21, 27, 0.10);
+  --accent: #2a78d6;
+  --series-2: #eb6834;
+  --warn: #fab219;
+  --good: #0ca30c;
+  --focus: #2a78d6;
+  --font-display: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1014;
+    --surface: #151a20;
+    --surface-2: #1e252d;
+    --ink: #f1f4f7;
+    --ink-2: #b8c2cc;
+    --muted: #87929e;
+    --grid: #232b33;
+    --axis: #37414b;
+    --border: rgba(255, 255, 255, 0.10);
+    --accent: #3987e5;
+    --series-2: #d95926;
+    --focus: #6da7ec;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1014;
+  --surface: #151a20;
+  --surface-2: #1e252d;
+  --ink: #f1f4f7;
+  --ink-2: #b8c2cc;
+  --muted: #87929e;
+  --grid: #232b33;
+  --axis: #37414b;
+  --border: rgba(255, 255, 255, 0.10);
+  --accent: #3987e5;
+  --series-2: #d95926;
+  --focus: #6da7ec;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-inline: clamp(16px, 4vw, 32px);
+  padding-block: 28px 56px;
+  display: grid;
+  gap: 18px;
+}
+h1, h2, .figure { font-family: var(--font-display); text-wrap: balance; }
+h1 { font-size: clamp(28px, 4vw, 36px); line-height: 1.1; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 18px; line-height: 1.25; margin: 0; font-weight: 600; }
+.eyebrow {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); font-weight: 600; margin: 0 0 6px;
+}
+.sub { color: var(--ink-2); margin: 6px 0 0; max-width: 62ch; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.top > div { min-width: 0; }
+.fresh {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--ink-2);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; padding: 5px 12px;
+}
+.fresh::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+
+/* Filters: one row, scoped to everything below */
+.filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.seg {
+  display: inline-flex; background: var(--surface-2); border-radius: 9px; padding: 3px; gap: 2px;
+}
+.seg button {
+  font: 500 13px/1 var(--font-body); color: var(--ink-2);
+  background: transparent; border: 0; border-radius: 7px; padding: 8px 12px; cursor: pointer;
+  white-space: nowrap;
+}
+.seg button:hover:not(:disabled) { color: var(--ink); background: color-mix(in srgb, var(--surface) 55%, transparent); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+.seg button:disabled { opacity: 0.45; cursor: not-allowed; }
+button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.filter-note { font-size: 12px; color: var(--muted); }
+
+/* Summary */
+.summary { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)); gap: 12px; }
+.panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 18px; min-width: 0;
+}
+.hero { display: flex; flex-direction: column; gap: 6px; }
+.hero .figure { font-size: 56px; line-height: 1; font-weight: 700; letter-spacing: -0.02em; }
+.hero .detail { color: var(--ink-2); }
+.tile { display: flex; flex-direction: column; gap: 4px; }
+.label { font-size: 13px; color: var(--ink-2); }
+.tile .figure { font-size: 28px; line-height: 1.1; font-weight: 600; white-space: nowrap; }
+.figure .unit { font-size: 0.6em; font-weight: 600; margin-left: 4px; color: var(--ink-2); }
+.tile .detail, .hero .basis { font-size: 12px; color: var(--muted); }
+.pill {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: var(--ink);
+  border-radius: 999px; padding: 3px 10px 3px 6px;
+  background: color-mix(in srgb, var(--pill, var(--muted)) 18%, transparent);
+}
+.pill svg { flex: none; }
+.pill.warn { --pill: var(--warn); }
+.pill.good { --pill: var(--good); }
+.pill.info { --pill: var(--accent); }
+
+/* Chart panels */
+.panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; margin-bottom: 12px; }
+.panel-head p { margin: 2px 0 0; color: var(--ink-2); font-size: 13px; max-width: 70ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.key-line { width: 16px; height: 2px; border-radius: 1px; background: var(--k); }
+.key-band { width: 16px; height: 10px; border-radius: 2px; background: color-mix(in srgb, var(--k) 14%, transparent); }
+.key-ref { width: 16px; height: 1px; background: var(--muted); }
+.chart { width: 100%; min-height: 120px; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart svg:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 4px; }
+svg .grid { stroke: var(--grid); stroke-width: 1; }
+svg .axis { stroke: var(--axis); stroke-width: 1; }
+svg .tick { fill: var(--muted); font: 11px var(--font-body); font-variant-numeric: tabular-nums; }
+svg .ref { stroke: var(--muted); stroke-width: 1; }
+svg .ref-label { fill: var(--muted); font: 11px var(--font-body); }
+svg .callout { fill: var(--ink-2); font: 600 12px var(--font-body); font-variant-numeric: tabular-nums; }
+svg .crosshair { stroke: var(--ink-2); stroke-width: 1; }
+svg .callout, svg .ref-label { paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+svg .ring-best { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.empty {
+  display: grid; place-items: center; text-align: center; color: var(--ink-2);
+  min-height: 160px; padding: 24px; border: 1px dashed var(--axis); border-radius: 8px;
+}
+.empty p { margin: 0; max-width: 46ch; }
+
+/* Heatmap */
+.heat-scroll { overflow-x: auto; padding-bottom: 4px; }
+.heat { display: grid; gap: 2px; min-width: max-content; }
+.heat .col { font-size: 11px; color: var(--muted); text-align: center; padding-bottom: 4px; font-variant-numeric: tabular-nums; }
+.heat .col.hour { color: var(--ink-2); font-weight: 600; }
+.heat .row { font-size: 12px; color: var(--ink-2); display: flex; align-items: center; font-weight: 600; }
+.heat .cell {
+  height: 34px; border-radius: 4px; display: grid; place-items: center;
+  font: 600 12px var(--font-body); font-variant-numeric: tabular-nums;
+  background: var(--surface-2); color: var(--muted);
+}
+.heat .cell[tabindex] { cursor: default; }
+.heat .cell[tabindex]:hover { filter: brightness(1.08); }
+.scale { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--ink-2); flex-wrap: wrap; }
+.scale .bar { width: 180px; max-width: 50vw; height: 8px; border-radius: 4px; }
+
+/* Lower row */
+.split { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 12px; }
+.routes { display: grid; gap: 14px; }
+.route { display: grid; gap: 6px; }
+.route-top { display: flex; justify-content: space-between; gap: 12px; }
+.route-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.route-meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.track { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.track i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+
+/* Table */
+details summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: 18px; list-style: none; display: flex; align-items: center; gap: 10px; }
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: "▸"; color: var(--muted); font-size: 14px; transition: transform .15s; }
+details[open] summary::before { transform: rotate(90deg); }
+details summary .count { font: 13px var(--font-body); color: var(--muted); }
+.table-scroll { overflow-x: auto; margin-top: 12px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+.table-note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+
+.foot { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+.foot p { margin: 0; max-width: 90ch; }
+code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; color: var(--ink-2); }
+
+/* Tooltip */
+.tip {
+  position: fixed; z-index: 10; pointer-events: none;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18); border-radius: 8px; padding: 10px 12px;
+  font-size: 12px; min-width: 160px; max-width: 260px;
+}
+.tip h3 { margin: 0 0 6px; font: 600 12px var(--font-body); color: var(--ink-2); }
+.tip .tr { display: grid; grid-template-columns: 14px auto; column-gap: 8px; align-items: center; margin-top: 4px; }
+.tip .tr i { width: 14px; height: 2px; border-radius: 1px; }
+.tip .tr strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.tip .tr span { grid-column: 2; color: var(--muted); }
+
+@media (max-width: 900px) {
+  .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summary .hero { grid-column: 1 / -1; }
+  .split { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 420px) {
+  .hero .figure { font-size: 48px; }
+  .tile .figure { font-size: 24px; }
+  .seg button { padding: 8px 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  details summary::before { transition: none; }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Lahore commute · PKT (UTC+5)</p>
+      <h1>When to leave</h1>
+      <p class="sub">Drive times between home and the office with Google’s live traffic, recorded every 15 minutes on workdays.</p>
+    </div>
+    <span class="fresh" id="fresh">No data yet</span>
+  </header>
+
+  <div class="filters" role="toolbar" aria-label="Filters">
+    <div class="seg" role="group" aria-label="Direction" id="f-dir">
+      <button type="button" id="dir-to_office" data-v="to_office">Home → Office</button>
+      <button type="button" id="dir-to_home" data-v="to_home">Office → Home</button>
+    </div>
+    <div class="seg" role="group" aria-label="Period" id="f-period">
+      <button type="button" id="period-7" data-v="7">7 days</button>
+      <button type="button" id="period-30" data-v="30">30 days</button>
+      <button type="button" id="period-all" data-v="all">All</button>
+    </div>
+    <div class="seg" role="group" aria-label="Data" id="f-src">
+      <button type="button" id="src-live" data-v="live">Live</button>
+      <button type="button" id="src-predicted" data-v="predicted">Google forecast</button>
+      <button type="button" id="src-both" data-v="both">Both</button>
+    </div>
+    <span class="filter-note" id="filter-note"></span>
+  </div>
+
+  <section class="summary" aria-label="Summary">
+    <div class="panel hero">
+      <span class="label">Best time to leave</span>
+      <span class="figure" id="k-best">—</span>
+      <span class="detail" id="k-best-detail"></span>
+      <span class="pill" id="k-confidence" hidden></span>
+    </div>
+    <div class="panel tile">
+      <span class="label">Slowest time</span>
+      <span class="figure" id="k-worst">—</span>
+      <span class="detail" id="k-worst-detail"></span>
+    </div>
+    <div class="panel tile">
+      <span class="label">Time saved</span>
+      <span class="figure" id="k-saved">—</span>
+      <span class="detail" id="k-saved-detail">best vs slowest departure</span>
+    </div>
+    <div class="panel tile">
+      <span class="label">Traffic delay</span>
+      <span class="figure" id="k-delay">—</span>
+      <span class="detail" id="k-delay-detail"></span>
+    </div>
+    <div class="panel tile">
+      <span class="label">Trips recorded</span>
+      <span class="figure" id="k-trips">—</span>
+      <span class="detail" id="k-trips-detail"></span>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-profile">
+    <div class="panel-head">
+      <div>
+        <h2 id="h-profile">Drive time by departure time</h2>
+        <p id="profile-sub">Typical drive time for each 15-minute departure slot. The shaded band covers the middle 80% of trips.</p>
+      </div>
+      <div class="legend" id="profile-legend"></div>
+    </div>
+    <div class="chart" id="profile"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-heat">
+    <div class="panel-head">
+      <div>
+        <h2 id="h-heat">Week at a glance</h2>
+        <p id="heat-sub">Typical minutes for each weekday and departure slot.</p>
+      </div>
+    </div>
+    <div class="heat-scroll"><div class="heat" id="heat"></div></div>
+    <div class="scale" id="heat-scale"></div>
+  </section>
+
+  <div class="split">
+    <section class="panel" aria-labelledby="h-daily">
+      <div class="panel-head">
+        <div>
+          <h2 id="h-daily">Day by day</h2>
+          <p>Each workday’s typical drive time, with the band from its fastest to slowest trip.</p>
+        </div>
+        <div class="legend" id="daily-legend"></div>
+      </div>
+      <div class="chart" id="daily"></div>
+    </section>
+    <section class="panel" aria-labelledby="h-routes">
+      <div class="panel-head">
+        <div>
+          <h2 id="h-routes">Routes Google chose</h2>
+          <p>Share of trips by main road, with each route’s typical time.</p>
+        </div>
+      </div>
+      <div class="routes" id="routes"></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <details id="trips-details">
+      <summary>All trips <span class="count" id="trips-count"></span></summary>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Date</th><th>Left at</th><th class="r">With traffic</th><th class="r">Empty roads</th><th class="r">Delay</th><th>Route</th><th>Data</th></tr>
+          </thead>
+          <tbody id="trips-body"></tbody>
+        </table>
+      </div>
+      <p class="table-note" id="trips-note"></p>
+    </details>
+  </section>
+
+  <footer class="foot">
+    <p id="foot-source">Drive times come from the Google Routes API with live traffic.</p>
+    <p>Trips are grouped into 15-minute slots by departure time, so a trip at 18:41 counts as 18:30. “Empty roads” is Google’s estimate for the same route with no traffic.</p>
+    <p>This page is a snapshot. Ask Claude to refresh it, or run <code>python commute_tracker.py dashboard</code> on your computer.</p>
+  </footer>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(() => {
+  "use strict";
+  const DATA = /*COMMUTE_DATA*/null;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const $ = (id) => document.getElementById(id);
+  const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const DIR_LABEL = { to_office: "Home → Office", to_home: "Office → Home" };
+  const SRC_LABEL = { live: "Live", predicted: "Google forecast" };
+  const SRC_COLOR = { live: "var(--accent)", predicted: "var(--series-2)" };
+  // Traffic heat stops (green = close to empty roads, red = slowest seen); fixed in both themes.
+  const HEAT = [[0, [35, 165, 90]], [0.35, [216, 196, 30]], [0.6, [240, 140, 42]], [0.82, [216, 67, 59]], [1, [150, 32, 45]]];
+
+  const SLOT = (DATA && DATA.slotMinutes) || 15;
+  const trips = ((DATA && DATA.trips) || []).map((r) => ({
+    date: r[0], wd: r[1], min: r[2], dir: r[3], src: r[4],
+    m: r[5] / 60, sm: r[6] ? r[6] / 60 : null, km: r[7] ? r[7] / 1000 : null,
+    via: r[8] || "Unnamed route",
+  }));
+  const genDate = DATA ? DATA.generated.slice(0, 10) : null;
+
+  // ---------- helpers ----------
+  const pad = (n) => String(n).padStart(2, "0");
+  const hhmm = (min) => pad(Math.floor(min / 60)) + ":" + pad(min % 60);
+  const toMin = (s) => { const [h, m] = s.split(":").map(Number); return h * 60 + m; };
+  const slotOf = (min) => Math.floor(min / SLOT) * SLOT;
+  const dateObj = (iso) => new Date(iso + "T12:00:00Z");
+  const fmtDate = (iso) => { const d = dateObj(iso); return WD[(d.getUTCDay() + 6) % 7] + " " + d.getUTCDate() + " " + MONTHS[d.getUTCMonth()]; };
+  const fmtShort = (iso) => { const d = dateObj(iso); return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()]; };
+  const addDays = (iso, n) => { const d = dateObj(iso); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const f1 = (v) => v.toFixed(1);
+  const plural = (n, word) => n + " " + word + (n === 1 ? "" : "s");
+  function quantile(sorted, q) {
+    if (!sorted.length) return NaN;
+    const pos = (sorted.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+  }
+  function stats(vals) {
+    const s = [...vals].sort((a, b) => a - b);
+    return { n: s.length, med: quantile(s, 0.5), p10: quantile(s, 0.1), p90: quantile(s, 0.9), lo: s[0], hi: s[s.length - 1] };
+  }
+  function groupBy(rows, key) {
+    const m = new Map();
+    for (const r of rows) { const k = key(r); if (!m.has(k)) m.set(k, []); m.get(k).push(r); }
+    return m;
+  }
+  function node(tag, cls, text, parent) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function svgEl(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function niceScale(lo, hi, count) {
+    if (!(hi > lo)) { lo -= 2; hi += 2; }
+    const raw = (hi - lo) / count;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 5, 10].map((m) => m * mag).find((s) => s >= raw);
+    const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step;
+    const ticks = [];
+    for (let v = a; v <= b + step / 1000; v += step) ticks.push(+v.toFixed(6));
+    return { lo: a, hi: b, ticks };
+  }
+  function heatColor(t) {
+    t = Math.max(0, Math.min(1, t));
+    for (let i = 1; i < HEAT.length; i++) {
+      if (t <= HEAT[i][0]) {
+        const [t0, c0] = HEAT[i - 1], [t1, c1] = HEAT[i], k = (t - t0) / (t1 - t0);
+        return c0.map((v, j) => Math.round(v + (c1[j] - v) * k));
+      }
+    }
+    return HEAT[HEAT.length - 1][1];
+  }
+  function inkFor(rgb) {
+    const lin = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    const L = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+    return L > 0.36 ? "#111" : "#fff";
+  }
+  const rgbStr = (c) => "rgb(" + c.join(",") + ")";
+  function emptyState(container, text) {
+    const box = node("div", "empty", null, container);
+    node("p", null, text, box);
+  }
+
+  // ---------- tooltip ----------
+  const tip = $("tip");
+  function showTip(clientX, clientY, title, rows) {
+    tip.replaceChildren();
+    node("h3", null, title, tip);
+    for (const r of rows) {
+      const tr = node("div", "tr", null, tip);
+      const key = node("i", null, null, tr);
+      if (r.color) key.style.background = r.color; else key.style.background = "transparent";
+      node("strong", null, r.value, tr);
+      if (r.label) node("span", null, r.label, tr);
+    }
+    tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
+    let x = clientX + 14, y = clientY - h - 12;
+    if (x + w > vw - 8) x = clientX - w - 14;
+    if (x < 8) x = 8;
+    if (y < 8) y = clientY + 16;
+    if (y + h > vh - 8) y = vh - h - 8;
+    tip.style.left = x + "px";
+    tip.style.top = y + "px";
+  }
+  const hideTip = () => { tip.hidden = true; };
+  function anchorTip(elem, title, rows) {
+    const b = elem.getBoundingClientRect();
+    showTip(b.left + b.width / 2, b.top, title, rows);
+  }
+
+  // ---------- state ----------
+  const hasSrc = (s) => trips.some((t) => t.src === s);
+  const latestOf = (rows) => rows.reduce((a, t) => (!a || t.date > a.date || (t.date === a.date && t.min > a.min) ? t : a), null);
+  const STORE = "commute-dashboard-filters";
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; } catch (e) { saved = {}; }
+  const latest = latestOf(trips.filter((t) => t.src === "live")) || latestOf(trips);
+  const state = {
+    dir: DIR_LABEL[saved.dir] ? saved.dir : (latest ? latest.dir : "to_office"),
+    period: ["7", "30", "all"].includes(saved.period) ? saved.period : "all",
+    src: ["live", "predicted", "both"].includes(saved.src) ? saved.src : (hasSrc("live") ? "live" : "predicted"),
+  };
+  if (state.src !== "live" && !hasSrc("predicted")) state.src = "live";
+  if (state.src !== "predicted" && !hasSrc("live") && hasSrc("predicted")) state.src = "predicted";
+  function save() { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* storage blocked */ } }
+
+  function selectedSources() {
+    return (state.src === "both" ? ["live", "predicted"] : [state.src]).filter(hasSrc);
+  }
+  function filtered() {
+    const cutoff = state.period === "all" || !genDate ? null : addDays(genDate, -(Number(state.period) - 1));
+    const srcs = selectedSources();
+    return trips.filter((t) => t.dir === state.dir && srcs.includes(t.src) && (!cutoff || t.date >= cutoff));
+  }
+
+  // ---------- summary ----------
+  function slotStats(rows) {
+    return [...groupBy(rows, (r) => slotOf(r.min)).entries()]
+      .map(([slot, rs]) => ({ slot, ...stats(rs.map((r) => r.m)) }))
+      .sort((a, b) => a.slot - b.slot);
+  }
+  function bestWorst(pts) {
+    if (!pts.length) return {};
+    const maxN = Math.max(...pts.map((p) => p.n));
+    const minN = maxN >= 3 ? 2 : 1;
+    const ok = pts.filter((p) => p.n >= minN);
+    const best = ok.reduce((a, p) => (p.med < a.med || (p.med === a.med && p.p90 < a.p90) ? p : a));
+    const worst = ok.reduce((a, p) => (p.med > a.med ? p : a));
+    return { best, worst };
+  }
+  const ICON = {
+    warn: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="#fab219"/><rect x="6.2" y="3.2" width="1.6" height="4.6" rx=".8" fill="#111"/><circle cx="7" cy="10.1" r=".95" fill="#111"/></svg>',
+    good: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="#0ca30c"/><path d="M4.2 7.2l1.9 1.9 3.8-4" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    info: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="#2a78d6"/><rect x="6.2" y="6" width="1.6" height="4.6" rx=".8" fill="#fff"/><circle cx="7" cy="4" r=".95" fill="#fff"/></svg>',
+  };
+  function setPill(kind, text) {
+    const pill = $("k-confidence");
+    pill.className = "pill " + kind;
+    pill.innerHTML = ICON[kind];
+    pill.appendChild(document.createTextNode(text));
+    pill.hidden = false;
+  }
+
+  function renderSummary(rows, primary) {
+    const pr = rows.filter((r) => r.src === primary);
+    const set = (id, text) => { $(id).textContent = text; };
+    const setFig = (id, value, unit) => { const e = $(id); e.textContent = value; node("span", "unit", unit, e); };
+    if (!pr.length) {
+      ["k-best", "k-worst", "k-saved", "k-delay", "k-trips"].forEach((id) => set(id, "—"));
+      set("k-best-detail", "No trips in this view yet.");
+      ["k-worst-detail", "k-delay-detail", "k-trips-detail"].forEach((id) => set(id, ""));
+      $("k-confidence").hidden = true;
+      return;
+    }
+    const { best, worst } = bestWorst(slotStats(pr));
+    set("k-best", hhmm(best.slot));
+    set("k-best-detail", f1(best.med) + " min typical" + (best.n >= 3 ? " · 9 in 10 trips under " + f1(best.p90) + " min" : " · " + plural(best.n, "trip") + " so far"));
+    set("k-worst", hhmm(worst.slot));
+    set("k-worst-detail", f1(worst.med) + " min typical");
+    const savedMin = worst.med - best.med;
+    setFig("k-saved", f1(savedMin), "min");
+    set("k-saved-detail", "leaving at " + hhmm(best.slot) + " instead of " + hhmm(worst.slot));
+    const delays = pr.filter((r) => r.sm).map((r) => r.m - r.sm);
+    const empty = pr.filter((r) => r.sm).map((r) => r.sm);
+    if (delays.length) {
+      setFig("k-delay", "+" + f1(stats(delays).med), "min");
+      set("k-delay-detail", "typical, on top of " + f1(stats(empty).med) + " min on empty roads");
+    } else { set("k-delay", "—"); set("k-delay-detail", ""); }
+    const days = new Set(pr.map((r) => r.date)).size;
+    set("k-trips", String(pr.length));
+    const last = latestOf(pr);
+    set("k-trips-detail", plural(days, primary === "live" ? "workday" : "forecast day") + " · latest " + fmtDate(last.date) + ", " + hhmm(last.min));
+
+    if (primary === "predicted") setPill("info", "Google’s forecast, not measured");
+    else if (days < 5) setPill("warn", "Early estimate · " + plural(days, "workday"));
+    else if (days < 15) setPill("warn", "Firming up · " + days + " workdays");
+    else setPill("good", "Reliable · " + days + " workdays");
+  }
+
+  // ---------- departure-time profile ----------
+  function legendFor(container, srcs, withBand, withRef) {
+    container.replaceChildren();
+    if (srcs.length > 1) {
+      for (const s of srcs) {
+        const item = node("span", null, null, container);
+        const k = node("i", "key-line", null, item); k.style.setProperty("--k", SRC_COLOR[s]);
+        item.appendChild(document.createTextNode(SRC_LABEL[s]));
+      }
+    }
+    if (withBand) {
+      const item = node("span", null, null, container);
+      const k = node("i", "key-band", null, item); k.style.setProperty("--k", SRC_COLOR[srcs[0]]);
+      item.appendChild(document.createTextNode(withBand));
+    }
+    if (withRef) {
+      const item = node("span", null, null, container);
+      node("i", "key-ref", null, item);
+      item.appendChild(document.createTextNode(withRef));
+    }
+  }
+
+  function renderProfile(rows, srcs) {
+    const box = $("profile");
+    box.replaceChildren();
+    legendFor($("profile-legend"), srcs, rows.length ? "Middle 80% of trips" : null, rows.some((r) => r.sm) ? "Empty roads" : null);
+    if (!rows.length) {
+      const [ws, we] = DATA.windows[state.dir];
+      emptyState(box, "No " + DIR_LABEL[state.dir] + " trips in this view yet. The tracker records them on workdays between " + ws + " and " + we + ".");
+      return;
+    }
+    const W = Math.max(300, box.clientWidth || 600);
+    const H = W < 560 ? 260 : 300;
+    const M = { l: 38, r: 12, t: 30, b: 28 };
+    const iw = W - M.l - M.r, ih = H - M.t - M.b;
+    const [ws, we] = DATA.windows[state.dir].map(toMin);
+    const x0 = Math.min(ws, ...rows.map((r) => slotOf(r.min)));
+    const x1 = Math.max(we, ...rows.map((r) => r.min));
+    const series = srcs.map((src) => {
+      const rs = rows.filter((r) => r.src === src);
+      return { src, rows: rs, pts: slotStats(rs) };
+    }).filter((s) => s.pts.length);
+    const emptyMed = stats(rows.filter((r) => r.sm).map((r) => r.sm)).med;
+    const vals = rows.map((r) => r.m);
+    series.forEach((s) => s.pts.forEach((p) => vals.push(p.p10, p.p90)));
+    if (!Number.isNaN(emptyMed)) vals.push(emptyMed);
+    const sc = niceScale(Math.min(...vals), Math.max(...vals), H < 280 ? 4 : 5);
+    const x = (m) => M.l + (x1 === x0 ? iw / 2 : ((m - x0) / (x1 - x0)) * iw);
+    const y = (v) => M.t + ih - ((v - sc.lo) / (sc.hi - sc.lo)) * ih;
+
+    const root = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img", tabindex: "0" }, box);
+    const best0 = series.length ? bestWorst(series[0].pts) : {};
+    root.setAttribute("aria-label", DIR_LABEL[state.dir] + " drive time by departure time. " +
+      (best0.best ? "Fastest typical departure " + hhmm(best0.best.slot) + " at " + f1(best0.best.med) + " minutes; slowest " + hhmm(best0.worst.slot) + " at " + f1(best0.worst.med) + " minutes." : "") +
+      " Use left and right arrow keys to read each slot.");
+
+    for (const t of sc.ticks) {
+      svgEl("line", { class: "grid", x1: M.l, x2: W - M.r, y1: y(t), y2: y(t) }, root);
+      svgEl("text", { class: "tick", x: M.l - 6, y: y(t), "text-anchor": "end", dy: "0.32em" }, root).textContent = String(t);
+    }
+    svgEl("line", { class: "axis", x1: M.l, x2: W - M.r, y1: M.t + ih, y2: M.t + ih }, root);
+    const span = x1 - x0;
+    const pxPerHour = span > 0 ? iw / (span / 60) : iw;
+    const hourStep = pxPerHour >= 110 ? 30 : pxPerHour >= 48 ? 60 : 120;
+    for (let m = Math.ceil(x0 / hourStep) * hourStep; m <= x1; m += hourStep) {
+      svgEl("text", { class: "tick", x: x(m), y: H - 8, "text-anchor": "middle" }, root).textContent = hhmm(m);
+    }
+    if (!Number.isNaN(emptyMed)) {
+      const bestRight = best0.best && x(best0.best.slot) > M.l + iw / 2;
+      svgEl("line", { class: "ref", x1: M.l, x2: W - M.r, y1: y(emptyMed), y2: y(emptyMed) }, root);
+      svgEl("text", { class: "ref-label", x: bestRight ? M.l + 4 : W - M.r, y: y(emptyMed) - 5, "text-anchor": bestRight ? "start" : "end" }, root).textContent = "Empty roads " + f1(emptyMed) + " min";
+    }
+
+    const runs = (pts) => {
+      const out = []; let cur = [];
+      for (const p of pts) {
+        if (cur.length && p.slot - cur[cur.length - 1].slot > SLOT) { out.push(cur); cur = []; }
+        cur.push(p);
+      }
+      if (cur.length) out.push(cur);
+      return out;
+    };
+    for (const s of series) {
+      const color = SRC_COLOR[s.src];
+      for (const run of runs(s.pts)) {
+        if (run.length < 2) continue;
+        const up = run.map((p) => x(p.slot) + "," + y(p.p90)).join(" L");
+        const down = run.slice().reverse().map((p) => x(p.slot) + "," + y(p.p10)).join(" L");
+        svgEl("path", { d: "M" + up + " L" + down + " Z", fill: color, "fill-opacity": "0.12", stroke: "none" }, root);
+      }
+    }
+    for (const s of series) {
+      for (const r of s.rows) {
+        svgEl("circle", { cx: x(r.min), cy: y(r.m), r: 2.5, fill: SRC_COLOR[s.src], "fill-opacity": "0.35" }, root);
+      }
+    }
+    for (const s of series) {
+      const color = SRC_COLOR[s.src];
+      for (const run of runs(s.pts)) {
+        if (run.length < 2) continue;
+        svgEl("path", { d: "M" + run.map((p) => x(p.slot) + "," + y(p.med)).join(" L"), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, root);
+      }
+      for (const p of s.pts) {
+        svgEl("circle", { cx: x(p.slot), cy: y(p.med), r: 4, fill: color, stroke: "var(--surface)", "stroke-width": 2 }, root);
+      }
+    }
+    if (best0.best && series[0].pts.length > 1) {
+      const { best, worst } = best0;
+      svgEl("circle", { class: "ring-best", cx: x(best.slot), cy: y(best.med), r: 8 }, root);
+      const place = (p, text, prefer) => {
+        const px = x(p.slot);
+        let py = prefer === "below" ? y(p.med) + 22 : y(p.med) - 13;
+        const nearRef = !Number.isNaN(emptyMed) && Math.abs(py - 4 - y(emptyMed)) < 12;
+        if (py > M.t + ih - 4 || nearRef) py = y(p.med) - 13;
+        if (py < 12) py = y(p.med) + 22;
+        const anchor = px < M.l + 70 ? "start" : px > W - M.r - 70 ? "end" : "middle";
+        const tx = anchor === "start" ? px - 6 : anchor === "end" ? px + 6 : px;
+        svgEl("text", { class: "callout", x: tx, y: py, "text-anchor": anchor }, root).textContent = text;
+      };
+      place(best, "Best " + hhmm(best.slot) + " · " + f1(best.med) + " min", "below");
+      if (worst.slot !== best.slot) place(worst, "Slowest " + hhmm(worst.slot) + " · " + f1(worst.med) + " min", "above");
+    }
+
+    // crosshair + tooltip
+    const slots = [...new Set(series.flatMap((s) => s.pts.map((p) => p.slot)))].sort((a, b) => a - b);
+    const cross = svgEl("line", { class: "crosshair", x1: 0, x2: 0, y1: M.t, y2: M.t + ih, visibility: "hidden" }, root);
+    const hit = svgEl("rect", { x: M.l, y: M.t, width: iw, height: ih, fill: "transparent" }, root);
+    let idx = -1;
+    function showSlot(i, clientX, clientY) {
+      idx = Math.max(0, Math.min(slots.length - 1, i));
+      const slot = slots[idx];
+      cross.setAttribute("x1", x(slot)); cross.setAttribute("x2", x(slot));
+      cross.setAttribute("visibility", "visible");
+      const lines = [];
+      for (const s of series) {
+        const p = s.pts.find((q) => q.slot === slot);
+        if (!p) continue;
+        lines.push({ color: SRC_COLOR[s.src], value: f1(p.med) + " min",
+          label: (series.length > 1 ? SRC_LABEL[s.src] + " · " : "") + (p.n > 1 ? f1(p.lo) + "–" + f1(p.hi) + " min · " : "") + plural(p.n, "trip") });
+      }
+      if (!Number.isNaN(emptyMed)) lines.push({ value: f1(emptyMed) + " min", label: "Empty roads" });
+      if (clientX == null) {
+        const b = root.getBoundingClientRect();
+        clientX = b.left + (x(slot) / W) * b.width; clientY = b.top + (M.t / H) * b.height + 20;
+      }
+      showTip(clientX, clientY, "Leaving at " + hhmm(slot), lines);
+    }
+    hit.addEventListener("pointermove", (e) => {
+      const b = root.getBoundingClientRect();
+      const m = x0 + (((e.clientX - b.left) / b.width) * W - M.l) / iw * (x1 - x0);
+      let bi = 0;
+      slots.forEach((s, i) => { if (Math.abs(s - m) < Math.abs(slots[bi] - m)) bi = i; });
+      showSlot(bi, e.clientX, e.clientY);
+    });
+    const clear = () => { cross.setAttribute("visibility", "hidden"); hideTip(); };
+    hit.addEventListener("pointerleave", clear);
+    root.addEventListener("blur", clear);
+    root.addEventListener("focus", () => showSlot(idx < 0 ? 0 : idx));
+    root.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") { showSlot(idx + 1); e.preventDefault(); }
+      else if (e.key === "ArrowLeft") { showSlot(idx - 1); e.preventDefault(); }
+      else if (e.key === "Escape") clear();
+    });
+  }
+
+  // ---------- heatmap ----------
+  function renderHeat(rows, primary) {
+    const grid = $("heat"), scale = $("heat-scale");
+    grid.replaceChildren(); scale.replaceChildren();
+    const pr = rows.filter((r) => r.src === primary);
+    $("heat-sub").textContent = "Typical minutes for each weekday and departure slot" + (state.src === "both" ? ", from live readings." : ".");
+    if (!pr.length) { grid.style.gridTemplateColumns = "1fr"; emptyState(grid, "The week view fills in as trips are recorded."); return; }
+    const [ws, we] = DATA.windows[state.dir].map(toMin);
+    const slotSet = new Set();
+    for (let m = ws; m <= we; m += SLOT) slotSet.add(m);
+    pr.forEach((r) => slotSet.add(slotOf(r.min)));
+    const slots = [...slotSet].sort((a, b) => a - b);
+    const days = [...new Set([0, 1, 2, 3, 4, ...pr.map((r) => r.wd)])].sort((a, b) => a - b);
+    const cells = new Map();
+    for (const [k, rs] of groupBy(pr, (r) => r.wd + "|" + slotOf(r.min))) cells.set(k, stats(rs.map((r) => r.m)));
+    const meds = [...cells.values()].map((c) => c.med);
+    const emptyMed = stats(pr.filter((r) => r.sm).map((r) => r.sm)).med;
+    const lo = Number.isNaN(emptyMed) ? Math.min(...meds) : Math.min(emptyMed, ...meds);
+    let hi = Math.max(...meds);
+    const minSpan = Math.max(4, lo * 0.25);
+    if (hi - lo < minSpan) hi = lo + minSpan;
+
+    grid.style.gridTemplateColumns = "40px repeat(" + slots.length + ", minmax(38px, 1fr))";
+    node("div", null, null, grid);
+    for (const s of slots) node("div", "col" + (s % 60 === 0 ? " hour" : ""), hhmm(s), grid);
+    for (const d of days) {
+      node("div", "row", WD[d], grid);
+      for (const s of slots) {
+        const c = cells.get(d + "|" + s);
+        const cell = node("div", "cell", c ? String(Math.round(c.med)) : "·", grid);
+        if (!c) { cell.setAttribute("aria-hidden", "true"); continue; }
+        const rgb = heatColor((c.med - lo) / (hi - lo));
+        cell.style.background = rgbStr(rgb);
+        cell.style.color = inkFor(rgb);
+        cell.tabIndex = 0;
+        const label = WD[d] + " " + hhmm(s);
+        const detail = (c.n > 1 ? f1(c.lo) + "–" + f1(c.hi) + " min · " : "") + plural(c.n, "trip");
+        cell.setAttribute("aria-label", label + ": " + f1(c.med) + " minutes typical, " + detail);
+        const show = (e) => {
+          const rowsTip = [{ value: f1(c.med) + " min", label: detail }];
+          if (e && e.clientX != null) showTip(e.clientX, e.clientY, "Leaving " + label, rowsTip);
+          else anchorTip(cell, "Leaving " + label, rowsTip);
+        };
+        cell.addEventListener("pointermove", show);
+        cell.addEventListener("pointerleave", hideTip);
+        cell.addEventListener("focus", () => show(null));
+        cell.addEventListener("blur", hideTip);
+      }
+    }
+    node("span", null, f1(lo) + " min" + (Number.isNaN(emptyMed) ? "" : " (empty roads)"), scale);
+    const bar = node("span", "bar", null, scale);
+    bar.style.background = "linear-gradient(90deg," + HEAT.map(([t, c]) => rgbStr(c) + " " + (t * 100) + "%").join(",") + ")";
+    node("span", null, f1(hi) + " min", scale);
+  }
+
+  // ---------- daily trend ----------
+  function renderDaily(rows, srcs) {
+    const box = $("daily");
+    box.replaceChildren();
+    legendFor($("daily-legend"), srcs, rows.length ? "Fastest to slowest" : null, null);
+    if (!rows.length) { emptyState(box, "Each workday adds a point here."); return; }
+    const series = srcs.map((src) => {
+      const by = groupBy(rows.filter((r) => r.src === src), (r) => r.date);
+      const pts = [...by.entries()].map(([date, rs]) => {
+        const s = stats(rs.map((r) => r.m));
+        const fastest = rs.reduce((a, r) => (r.m < a.m ? r : a)), slowest = rs.reduce((a, r) => (r.m > a.m ? r : a));
+        return { date, ...s, fastest, slowest };
+      }).sort((a, b) => (a.date < b.date ? -1 : 1));
+      return { src, pts };
+    }).filter((s) => s.pts.length);
+    const dates = [...new Set(series.flatMap((s) => s.pts.map((p) => p.date)))].sort();
+    const W = Math.max(300, box.clientWidth || 500), H = 240;
+    const M = { l: 38, r: 54, t: 16, b: 28 };
+    const iw = W - M.l - M.r, ih = H - M.t - M.b;
+    const vals = series.flatMap((s) => s.pts.flatMap((p) => [p.lo, p.hi]));
+    const sc = niceScale(Math.min(...vals), Math.max(...vals), 4);
+    const x = (i) => M.l + (dates.length === 1 ? iw / 2 : (i / (dates.length - 1)) * iw);
+    const y = (v) => M.t + ih - ((v - sc.lo) / (sc.hi - sc.lo)) * ih;
+    const root = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img", tabindex: "0" }, box);
+    root.setAttribute("aria-label", "Typical drive time per day for " + plural(dates.length, "day") + ". Use left and right arrow keys to read each day.");
+    for (const t of sc.ticks) {
+      svgEl("line", { class: "grid", x1: M.l, x2: W - M.r, y1: y(t), y2: y(t) }, root);
+      svgEl("text", { class: "tick", x: M.l - 6, y: y(t), "text-anchor": "end", dy: "0.32em" }, root).textContent = String(t);
+    }
+    svgEl("line", { class: "axis", x1: M.l, x2: W - M.r, y1: M.t + ih, y2: M.t + ih }, root);
+    const every = Math.max(1, Math.ceil(dates.length / Math.max(2, Math.floor(iw / 64))));
+    const labelled = [];
+    for (let i = dates.length - 1; i >= 0; i--) {
+      if (i % every && i !== dates.length - 1) continue;
+      if (labelled.length && x(labelled[labelled.length - 1]) - x(i) < 58) continue;
+      labelled.push(i);
+    }
+    for (const i of labelled) {
+      const anchor = dates.length === 1 ? "middle" : i === 0 ? "start" : i === dates.length - 1 ? "end" : "middle";
+      svgEl("text", { class: "tick", x: x(i), y: H - 8, "text-anchor": anchor }, root).textContent = fmtShort(dates[i]);
+    }
+    const xi = (d) => x(dates.indexOf(d));
+    for (const s of series) {
+      const color = SRC_COLOR[s.src];
+      if (s.pts.length > 1) {
+        const up = s.pts.map((p) => xi(p.date) + "," + y(p.hi)).join(" L");
+        const down = s.pts.slice().reverse().map((p) => xi(p.date) + "," + y(p.lo)).join(" L");
+        svgEl("path", { d: "M" + up + " L" + down + " Z", fill: color, "fill-opacity": "0.12", stroke: "none" }, root);
+        svgEl("path", { d: "M" + s.pts.map((p) => xi(p.date) + "," + y(p.med)).join(" L"), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, root);
+      } else {
+        const p = s.pts[0];
+        svgEl("line", { x1: xi(p.date), x2: xi(p.date), y1: y(p.lo), y2: y(p.hi), stroke: color, "stroke-opacity": "0.35", "stroke-width": 8, "stroke-linecap": "round" }, root);
+      }
+      for (const p of s.pts) svgEl("circle", { cx: xi(p.date), cy: y(p.med), r: 4, fill: color, stroke: "var(--surface)", "stroke-width": 2 }, root);
+    }
+    const lastP = series[0].pts[series[0].pts.length - 1];
+    if (lastP.date === dates[dates.length - 1]) {
+      svgEl("text", { class: "callout", x: xi(lastP.date) + 10, y: y(lastP.med), dy: "0.32em" }, root).textContent = f1(lastP.med) + " min";
+    }
+
+    const cross = svgEl("line", { class: "crosshair", x1: 0, x2: 0, y1: M.t, y2: M.t + ih, visibility: "hidden" }, root);
+    const hit = svgEl("rect", { x: M.l - 10, y: M.t, width: iw + 20, height: ih, fill: "transparent" }, root);
+    let idx = -1;
+    function showDay(i, cx, cy) {
+      idx = Math.max(0, Math.min(dates.length - 1, i));
+      const d = dates[idx];
+      cross.setAttribute("x1", x(idx)); cross.setAttribute("x2", x(idx)); cross.setAttribute("visibility", "visible");
+      const lines = [];
+      for (const s of series) {
+        const p = s.pts.find((q) => q.date === d);
+        if (!p) continue;
+        lines.push({ color: SRC_COLOR[s.src], value: f1(p.med) + " min typical",
+          label: (series.length > 1 ? SRC_LABEL[s.src] + " · " : "") + "fastest " + f1(p.fastest.m) + " at " + hhmm(p.fastest.min) + ", slowest " + f1(p.slowest.m) + " at " + hhmm(p.slowest.min) + " · " + plural(p.n, "trip") });
+      }
+      if (cx == null) { const b = root.getBoundingClientRect(); cx = b.left + (x(idx) / W) * b.width; cy = b.top + 30; }
+      showTip(cx, cy, fmtDate(d), lines);
+    }
+    hit.addEventListener("pointermove", (e) => {
+      const b = root.getBoundingClientRect();
+      const px = ((e.clientX - b.left) / b.width) * W;
+      let bi = 0;
+      dates.forEach((_, i) => { if (Math.abs(x(i) - px) < Math.abs(x(bi) - px)) bi = i; });
+      showDay(bi, e.clientX, e.clientY);
+    });
+    const clear = () => { cross.setAttribute("visibility", "hidden"); hideTip(); };
+    hit.addEventListener("pointerleave", clear);
+    root.addEventListener("blur", clear);
+    root.addEventListener("focus", () => showDay(idx < 0 ? dates.length - 1 : idx));
+    root.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") { showDay(idx + 1); e.preventDefault(); }
+      else if (e.key === "ArrowLeft") { showDay(idx - 1); e.preventDefault(); }
+      else if (e.key === "Escape") clear();
+    });
+    if (dates.length < 3) {
+      const note = node("p", "table-note", "The trend line appears once there are a few workdays of data.", box);
+      note.style.margin = "6px 0 0";
+    }
+  }
+
+  // ---------- routes ----------
+  function renderRoutes(rows) {
+    const box = $("routes");
+    box.replaceChildren();
+    if (!rows.length) { emptyState(box, "Routes appear once trips are recorded."); return; }
+    const groups = [...groupBy(rows, (r) => r.via).entries()]
+      .map(([via, rs]) => ({ via, n: rs.length, med: stats(rs.map((r) => r.m)).med, km: stats(rs.filter((r) => r.km).map((r) => r.km)).med }))
+      .sort((a, b) => b.n - a.n);
+    const shown = groups.slice(0, 5);
+    const rest = groups.slice(5);
+    if (rest.length) shown.push({ via: "Other routes", n: rest.reduce((a, g) => a + g.n, 0), med: NaN, km: NaN });
+    for (const g of shown) {
+      const row = node("div", "route", null, box);
+      const top = node("div", "route-top", null, row);
+      node("span", "route-name", g.via, top);
+      node("span", "route-meta num", Math.round((g.n / rows.length) * 100) + "% · " + plural(g.n, "trip"), top);
+      const track = node("div", "track", null, row);
+      node("i", null, null, track).style.width = ((g.n / rows.length) * 100).toFixed(1) + "%";
+      if (!Number.isNaN(g.med)) node("span", "route-meta num", f1(g.med) + " min typical" + (Number.isNaN(g.km) ? "" : " · " + f1(g.km) + " km"), row);
+    }
+  }
+
+  // ---------- table ----------
+  function renderTable(rows) {
+    const body = $("trips-body");
+    body.replaceChildren();
+    const sorted = rows.slice().sort((a, b) => (a.date === b.date ? b.min - a.min : a.date < b.date ? 1 : -1));
+    const limit = 150;
+    $("trips-count").textContent = plural(rows.length, "trip") + " · " + DIR_LABEL[state.dir];
+    for (const r of sorted.slice(0, limit)) {
+      const tr = node("tr", null, null, body);
+      node("td", null, fmtDate(r.date), tr);
+      node("td", "num", hhmm(r.min), tr);
+      node("td", "r", f1(r.m) + " min", tr);
+      node("td", "r", r.sm ? f1(r.sm) + " min" : "—", tr);
+      node("td", "r", r.sm ? (r.m - r.sm >= 0 ? "+" : "") + f1(r.m - r.sm) + " min" : "—", tr);
+      node("td", null, r.via, tr);
+      node("td", null, SRC_LABEL[r.src], tr);
+    }
+    $("trips-note").textContent = rows.length > limit ? "Showing the latest " + limit + " of " + rows.length + " trips." : (rows.length ? "" : "No trips in this view yet.");
+  }
+
+  // ---------- controls ----------
+  function syncControls() {
+    for (const [group, key] of [["f-dir", "dir"], ["f-period", "period"], ["f-src", "src"]]) {
+      for (const b of $(group).querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.v === state[key]));
+    }
+    const noForecast = !hasSrc("predicted"), noLive = !hasSrc("live");
+    $("src-predicted").disabled = noForecast;
+    $("src-both").disabled = noForecast || noLive;
+    $("src-live").disabled = noLive;
+    $("filter-note").textContent = noForecast ? "Run predict to add Google’s 7-day forecast." : "";
+  }
+  for (const [group, key] of [["f-dir", "dir"], ["f-period", "period"], ["f-src", "src"]]) {
+    $(group).addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b || b.disabled || state[key] === b.dataset.v) return;
+      state[key] = b.dataset.v;
+      save();
+      render();
+    });
+  }
+
+  function render() {
+    hideTip();
+    syncControls();
+    const rows = filtered();
+    const srcs = selectedSources();
+    const primary = srcs.includes("live") && rows.some((r) => r.src === "live") ? "live" : (srcs[0] || "live");
+    renderSummary(rows, primary);
+    renderProfile(rows, srcs);
+    renderHeat(rows, primary);
+    renderDaily(rows, srcs);
+    renderRoutes(rows.filter((r) => r.src === primary));
+    renderTable(rows);
+  }
+
+  if (!DATA) {
+    $("fresh").textContent = "No data embedded";
+    emptyState($("profile"), "Open the page made by python commute_tracker.py dashboard, which fills in your recorded trips.");
+    return;
+  }
+  const lastLive = latestOf(trips.filter((t) => t.src === "live"));
+  $("fresh").textContent = lastLive
+    ? "Latest reading " + fmtDate(lastLive.date) + ", " + hhmm(lastLive.min) + " · " + plural(trips.length, "trip")
+    : "Snapshot " + fmtDate(genDate) + " · " + plural(trips.length, "trip");
+  $("foot-source").textContent = "Drive times come from the Google Routes API with live traffic (" + DATA.routing + "). Snapshot made " + fmtDate(genDate) + ", " + DATA.generated.slice(11, 16) + " PKT.";
+
+  render();
+  let lastW = 0, timer = 0;
+  window.addEventListener("resize", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { if (Math.abs(window.innerWidth - lastW) > 4) { lastW = window.innerWidth; render(); } }, 120);
+  });
+  lastW = window.innerWidth;
+})();
+</script>

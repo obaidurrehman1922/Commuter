@@ -59,6 +59,7 @@ python commute_tracker.py report --source predicted
 | `poll --force` | Records both directions right now, whatever the time. These are stored as ordinary `live` rows and show up in the report. |
 | `predict` | Asks for Google's traffic prediction at every 15-minute slot in the windows on each workday over the next 7 days (about 170 API calls). Rows are stored as `predicted`. |
 | `report [--source live\|predicted\|all]` | Writes `commute_heatmap.png` and prints the best 3 departure slots, the worst slot, the average congestion index and the most common routes for each direction. Defaults to `live`. |
+| `dashboard` | Writes `commute_dashboard.html`, an interactive page you open in a browser. It shows the best time to leave, drive time by departure slot, a weekday heatmap, a day-by-day trend and the routes taken, with filters for direction, period and live or forecast data. The page is built from `dashboard_template.html` with your trips embedded, so it works offline. |
 
 `predict` gives you a heatmap straight away. The live data from the scheduled job takes a
 few weeks to become reliable.

@@ -2,3 +2,4 @@ __pycache__/
 *.py[cod]
 .venv/
 commute_heatmap.png
+commute_dashboard.html

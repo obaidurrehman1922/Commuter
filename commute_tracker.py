@@ -8,11 +8,13 @@ Commands:
     poll [--force]                       record live traffic for the current window
     predict                              record predicted traffic for the next week
     report [--source live|predicted|all] build commute_heatmap.png and print a summary
+    dashboard                            build commute_dashboard.html, an interactive page of trends
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import math
 import os
@@ -49,6 +51,9 @@ REQUEST_TIMEOUT = 30
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "commute.db"
 HEATMAP_PATH = BASE_DIR / "commute_heatmap.png"
+DASHBOARD_TEMPLATE = BASE_DIR / "dashboard_template.html"
+DASHBOARD_PATH = BASE_DIR / "commute_dashboard.html"
+DASHBOARD_DATA_MARKER = "/*COMMUTE_DATA*/null"
 
 ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 FIELD_MASK = "routes.duration,routes.staticDuration,routes.distanceMeters,routes.description"
@@ -416,6 +421,51 @@ def print_summary(sub, direction: str, source: str) -> None:
         print(f"  {count / len(sub):4.0%}  via {via}")
 
 
+def cmd_dashboard() -> int:
+    if not DB_PATH.exists():
+        log.error("No database at %s yet; run poll or predict first", DB_PATH)
+        return 1
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        rows = conn.execute(
+            "SELECT depart_at, direction, source, duration_s, static_s, distance_m, via"
+            " FROM trips WHERE duration_s IS NOT NULL ORDER BY depart_at"
+        ).fetchall()
+
+    trips = []
+    for depart_at, direction, source, duration_s, static_s, distance_m, via in rows:
+        local = datetime.fromisoformat(depart_at).astimezone(TZ)
+        trips.append([
+            local.strftime("%Y-%m-%d"),
+            local.weekday(),
+            local.hour * 60 + local.minute,
+            direction,
+            source,
+            duration_s,
+            static_s,
+            distance_m,
+            via,
+        ])
+    data = {
+        "generated": now_local().isoformat(timespec="minutes"),
+        "slotMinutes": SLOT_MINUTES,
+        "windows": {d: [w[0].strftime("%H:%M"), w[1].strftime("%H:%M")] for d, (_, _, w) in DIRECTIONS.items()},
+        "routing": ROUTING_PREFERENCE,
+        "trips": trips,
+    }
+
+    template = DASHBOARD_TEMPLATE.read_text(encoding="utf-8")
+    if DASHBOARD_DATA_MARKER not in template:
+        log.error("%s is missing the %s marker", DASHBOARD_TEMPLATE.name, DASHBOARD_DATA_MARKER)
+        return 1
+    # "</" is escaped so a route description can never close the <script> tag early.
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    page = template.replace(DASHBOARD_DATA_MARKER, payload, 1)
+    head = '<!doctype html>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+    DASHBOARD_PATH.write_text(head + page, encoding="utf-8")
+    log.info("Saved dashboard with %d trips to %s", len(trips), DASHBOARD_PATH)
+    return 0
+
+
 # --------------------------------------------------------------------------
 # Entry point
 # --------------------------------------------------------------------------
@@ -427,6 +477,7 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("predict", help=f"record predicted traffic for the next {PREDICT_DAYS} days")
     report = commands.add_parser("report", help="build the heatmap and print a summary")
     report.add_argument("--source", choices=["live", "predicted", "all"], default="live")
+    commands.add_parser("dashboard", help="build an interactive dashboard page of trends")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -436,6 +487,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_poll(args.force)
     if args.command == "predict":
         return cmd_predict()
+    if args.command == "dashboard":
+        return cmd_dashboard()
     return cmd_report(args.source)
 
 

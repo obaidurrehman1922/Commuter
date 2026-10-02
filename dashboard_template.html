@@ -3,8 +3,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&display=swap">
 <style>
-/* Layout: one column of panels on a slate ground: filters, summary row (hero + four tiles),
-   departure-time profile, week heatmap, then daily trend beside routes, then the trips table.
+/* Layout: header and one filter row, then two parallel columns, one per leg of the commute
+   (leaving home in the morning, leaving the office in the evening), each a stack of panels:
+   best time, drive time by departure, week heatmap, day by day, routes. The trips table spans both.
    Barlow (road-signage lineage) carries headings and figures; the system sans carries everything else. */
 :root {
   --bg: #f1f3f5;
@@ -67,21 +68,22 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 .wrap {
-  max-width: 1120px;
+  max-width: 1200px;
   margin: 0 auto;
   padding-inline: clamp(16px, 4vw, 32px);
   padding-block: 28px 56px;
   display: grid;
   gap: 18px;
 }
-h1, h2, .figure { font-family: var(--font-display); text-wrap: balance; }
+h1, h2, h3, .figure { font-family: var(--font-display); text-wrap: balance; }
 h1 { font-size: clamp(28px, 4vw, 36px); line-height: 1.1; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
-h2 { font-size: 18px; line-height: 1.25; margin: 0; font-weight: 600; }
+h2 { font-size: 20px; line-height: 1.2; margin: 0; font-weight: 700; }
+h3 { font-size: 16px; line-height: 1.25; margin: 0; font-weight: 600; }
 .eyebrow {
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--muted); font-weight: 600; margin: 0 0 6px;
+  color: var(--muted); font-weight: 600; margin: 0 0 4px;
 }
-.sub { color: var(--ink-2); margin: 6px 0 0; max-width: 62ch; }
+.sub { color: var(--ink-2); margin: 6px 0 0; max-width: 64ch; }
 .num { font-variant-numeric: tabular-nums; }
 
 /* Header */
@@ -111,20 +113,24 @@ h2 { font-size: 18px; line-height: 1.25; margin: 0; font-weight: 600; }
 button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .filter-note { font-size: 12px; color: var(--muted); }
 
-/* Summary */
-.summary { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)); gap: 12px; }
+/* Two legs side by side */
+.dirs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.dir { display: grid; gap: 12px; min-width: 0; }
 .panel {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 18px; min-width: 0;
 }
+
+/* Best-time card */
 .hero { display: flex; flex-direction: column; gap: 6px; }
-.hero .figure { font-size: 56px; line-height: 1; font-weight: 700; letter-spacing: -0.02em; }
+.hero-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px 12px; margin-bottom: 4px; }
+.hero-top > div { min-width: 0; }
+.window-chip {
+  font-size: 12px; font-weight: 600; color: var(--ink-2); background: var(--surface-2);
+  border-radius: 999px; padding: 3px 10px; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.hero .figure { font-size: 60px; line-height: 1; font-weight: 700; letter-spacing: -0.02em; }
 .hero .detail { color: var(--ink-2); }
-.tile { display: flex; flex-direction: column; gap: 4px; }
-.label { font-size: 13px; color: var(--ink-2); }
-.tile .figure { font-size: 28px; line-height: 1.1; font-weight: 600; white-space: nowrap; }
-.figure .unit { font-size: 0.6em; font-weight: 600; margin-left: 4px; color: var(--ink-2); }
-.tile .detail, .hero .basis { font-size: 12px; color: var(--muted); }
 .pill {
   align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 600; color: var(--ink);
@@ -135,9 +141,18 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus)
 .pill.warn { --pill: var(--warn); }
 .pill.good { --pill: var(--good); }
 .pill.info { --pill: var(--accent); }
+.stats {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px;
+  margin: 10px 0 0; padding-top: 14px; border-top: 1px solid var(--grid);
+}
+.stats > div { display: grid; gap: 2px; min-width: 0; }
+.stats dt { font-size: 12px; color: var(--muted); }
+.stats dd { margin: 0; font: 600 19px/1.2 var(--font-display); }
+.stats dd small { font: 12px var(--font-body); color: var(--muted); margin-left: 6px; }
 
 /* Chart panels */
 .panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; margin-bottom: 12px; }
+.panel-head > div { min-width: 0; }
 .panel-head p { margin: 2px 0 0; color: var(--ink-2); font-size: 13px; max-width: 70ch; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-2); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -158,9 +173,10 @@ svg .callout, svg .ref-label { paint-order: stroke; stroke: var(--surface); stro
 svg .ring-best { fill: none; stroke: var(--ink); stroke-width: 1.5; }
 .empty {
   display: grid; place-items: center; text-align: center; color: var(--ink-2);
-  min-height: 160px; padding: 24px; border: 1px dashed var(--axis); border-radius: 8px;
+  min-height: 140px; padding: 24px; border: 1px dashed var(--axis); border-radius: 8px;
 }
 .empty p { margin: 0; max-width: 46ch; }
+.note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
 
 /* Heatmap */
 .heat-scroll { overflow-x: auto; padding-bottom: 4px; }
@@ -176,10 +192,9 @@ svg .ring-best { fill: none; stroke: var(--ink); stroke-width: 1.5; }
 .heat .cell[tabindex] { cursor: default; }
 .heat .cell[tabindex]:hover { filter: brightness(1.08); }
 .scale { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--ink-2); flex-wrap: wrap; }
-.scale .bar { width: 180px; max-width: 50vw; height: 8px; border-radius: 4px; }
+.scale .bar { width: 160px; max-width: 40vw; height: 8px; border-radius: 4px; }
 
-/* Lower row */
-.split { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 12px; }
+/* Routes */
 .routes { display: grid; gap: 14px; }
 .route { display: grid; gap: 6px; }
 .route-top { display: flex; justify-content: space-between; gap: 12px; }
@@ -199,7 +214,6 @@ table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
 th { font-size: 12px; color: var(--muted); font-weight: 600; }
 td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
-.table-note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
 
 .foot { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
 .foot p { margin: 0; max-width: 90ch; }
@@ -218,14 +232,12 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
 .tip .tr strong { font-size: 14px; font-variant-numeric: tabular-nums; }
 .tip .tr span { grid-column: 2; color: var(--muted); }
 
-@media (max-width: 900px) {
-  .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .summary .hero { grid-column: 1 / -1; }
-  .split { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 980px) {
+  .dirs { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 420px) {
-  .hero .figure { font-size: 48px; }
-  .tile .figure { font-size: 24px; }
+  .hero .figure { font-size: 52px; }
+  .stats dd { font-size: 17px; }
   .seg button { padding: 8px 9px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -238,16 +250,12 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     <div>
       <p class="eyebrow">Lahore commute · PKT (UTC+5)</p>
       <h1>When to leave</h1>
-      <p class="sub">Drive times between home and the office with Google’s live traffic, recorded every 15 minutes on workdays.</p>
+      <p class="sub">The best time to leave home in the morning and the office in the evening, from Google’s live traffic recorded every 15 minutes on workdays.</p>
     </div>
     <span class="fresh" id="fresh">No data yet</span>
   </header>
 
   <div class="filters" role="toolbar" aria-label="Filters">
-    <div class="seg" role="group" aria-label="Direction" id="f-dir">
-      <button type="button" id="dir-to_office" data-v="to_office">Home → Office</button>
-      <button type="button" id="dir-to_home" data-v="to_home">Office → Home</button>
-    </div>
     <div class="seg" role="group" aria-label="Period" id="f-period">
       <button type="button" id="period-7" data-v="7">7 days</button>
       <button type="button" id="period-30" data-v="30">30 days</button>
@@ -261,78 +269,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     <span class="filter-note" id="filter-note"></span>
   </div>
 
-  <section class="summary" aria-label="Summary">
-    <div class="panel hero">
-      <span class="label">Best time to leave</span>
-      <span class="figure" id="k-best">—</span>
-      <span class="detail" id="k-best-detail"></span>
-      <span class="pill" id="k-confidence" hidden></span>
-    </div>
-    <div class="panel tile">
-      <span class="label">Slowest time</span>
-      <span class="figure" id="k-worst">—</span>
-      <span class="detail" id="k-worst-detail"></span>
-    </div>
-    <div class="panel tile">
-      <span class="label">Time saved</span>
-      <span class="figure" id="k-saved">—</span>
-      <span class="detail" id="k-saved-detail">best vs slowest departure</span>
-    </div>
-    <div class="panel tile">
-      <span class="label">Traffic delay</span>
-      <span class="figure" id="k-delay">—</span>
-      <span class="detail" id="k-delay-detail"></span>
-    </div>
-    <div class="panel tile">
-      <span class="label">Trips recorded</span>
-      <span class="figure" id="k-trips">—</span>
-      <span class="detail" id="k-trips-detail"></span>
-    </div>
-  </section>
-
-  <section class="panel" aria-labelledby="h-profile">
-    <div class="panel-head">
-      <div>
-        <h2 id="h-profile">Drive time by departure time</h2>
-        <p id="profile-sub">Typical drive time for each 15-minute departure slot. The shaded band covers the middle 80% of trips.</p>
-      </div>
-      <div class="legend" id="profile-legend"></div>
-    </div>
-    <div class="chart" id="profile"></div>
-  </section>
-
-  <section class="panel" aria-labelledby="h-heat">
-    <div class="panel-head">
-      <div>
-        <h2 id="h-heat">Week at a glance</h2>
-        <p id="heat-sub">Typical minutes for each weekday and departure slot.</p>
-      </div>
-    </div>
-    <div class="heat-scroll"><div class="heat" id="heat"></div></div>
-    <div class="scale" id="heat-scale"></div>
-  </section>
-
-  <div class="split">
-    <section class="panel" aria-labelledby="h-daily">
-      <div class="panel-head">
-        <div>
-          <h2 id="h-daily">Day by day</h2>
-          <p>Each workday’s typical drive time, with the band from its fastest to slowest trip.</p>
-        </div>
-        <div class="legend" id="daily-legend"></div>
-      </div>
-      <div class="chart" id="daily"></div>
-    </section>
-    <section class="panel" aria-labelledby="h-routes">
-      <div class="panel-head">
-        <div>
-          <h2 id="h-routes">Routes Google chose</h2>
-          <p>Share of trips by main road, with each route’s typical time.</p>
-        </div>
-      </div>
-      <div class="routes" id="routes"></div>
-    </section>
-  </div>
+  <div class="dirs" id="dirs"></div>
 
   <section class="panel">
     <details id="trips-details">
@@ -340,21 +277,83 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
       <div class="table-scroll">
         <table>
           <thead>
-            <tr><th>Date</th><th>Left at</th><th class="r">With traffic</th><th class="r">Empty roads</th><th class="r">Delay</th><th>Route</th><th>Data</th></tr>
+            <tr><th>Date</th><th>Direction</th><th>Left at</th><th class="r">With traffic</th><th class="r">Empty roads</th><th class="r">Delay</th><th>Route</th><th>Data</th></tr>
           </thead>
           <tbody id="trips-body"></tbody>
         </table>
       </div>
-      <p class="table-note" id="trips-note"></p>
+      <p class="note" id="trips-note"></p>
     </details>
   </section>
 
   <footer class="foot">
     <p id="foot-source">Drive times come from the Google Routes API with live traffic.</p>
-    <p>Trips are grouped into 15-minute slots by departure time, so a trip at 18:41 counts as 18:30. “Empty roads” is Google’s estimate for the same route with no traffic.</p>
+    <p>Only trips that leave inside each window count. Trips are grouped into 15-minute slots by departure time, so a trip at 19:41 counts as 19:30. “Empty roads” is Google’s estimate for the same route with no traffic.</p>
     <p>The page is rebuilt from <code>commute.db</code> after every recorded trip. Reload it to see the latest readings.</p>
   </footer>
 </div>
+
+<template id="dir-tpl">
+  <section class="dir">
+    <div class="panel hero">
+      <div class="hero-top">
+        <div>
+          <p class="eyebrow" data-role="eyebrow"></p>
+          <h2 data-role="title"></h2>
+        </div>
+        <span class="window-chip" data-role="window"></span>
+      </div>
+      <span class="figure" data-role="best">—</span>
+      <span class="detail" data-role="best-detail"></span>
+      <span class="pill" data-role="confidence" hidden></span>
+      <dl class="stats">
+        <div><dt>Slowest time</dt><dd data-role="worst">—</dd></div>
+        <div><dt>Time saved</dt><dd data-role="saved">—</dd></div>
+        <div><dt>Traffic delay</dt><dd data-role="delay">—</dd></div>
+        <div><dt>Trips recorded</dt><dd data-role="trips">—</dd></div>
+      </dl>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Drive time by departure time</h3>
+          <p>Typical minutes for each 15-minute slot. The band covers the middle 80% of trips.</p>
+        </div>
+        <div class="legend" data-role="profile-legend"></div>
+      </div>
+      <div class="chart" data-role="profile"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Week at a glance</h3>
+          <p data-role="heat-sub">Typical minutes for each weekday and departure slot.</p>
+        </div>
+      </div>
+      <div class="heat-scroll"><div class="heat" data-role="heat"></div></div>
+      <div class="scale" data-role="heat-scale"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Day by day</h3>
+          <p>Each workday’s typical drive time, with the band from its fastest to slowest trip.</p>
+        </div>
+        <div class="legend" data-role="daily-legend"></div>
+      </div>
+      <div class="chart" data-role="daily"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Routes Google chose</h3>
+          <p>Share of trips by main road, with each route’s typical time.</p>
+        </div>
+      </div>
+      <div class="routes" data-role="routes"></div>
+    </div>
+  </section>
+</template>
 <div class="tip" id="tip" hidden></div>
 
 <script>
@@ -366,7 +365,11 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   const $ = (id) => document.getElementById(id);
   const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const DIR_LABEL = { to_office: "Home → Office", to_home: "Office → Home" };
+  const DIRS = ["to_office", "to_home"];
+  const DIR_META = {
+    to_office: { label: "Home → Office", eyebrow: "Morning · Home → Office", title: "Best time to leave home", leaving: "leaving home" },
+    to_home: { label: "Office → Home", eyebrow: "Evening · Office → Home", title: "Best time to leave the office", leaving: "leaving the office" },
+  };
   const SRC_LABEL = { live: "Live", predicted: "Google forecast" };
   const SRC_COLOR = { live: "var(--accent)", predicted: "var(--series-2)" };
   // Traffic heat stops (green = close to empty roads, red = slowest seen); fixed in both themes.
@@ -391,6 +394,8 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   const addDays = (iso, n) => { const d = dateObj(iso); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   const f1 = (v) => v.toFixed(1);
   const plural = (n, word) => n + " " + word + (n === 1 ? "" : "s");
+  const windowOf = (dir) => (DATA ? DATA.windows[dir].map(toMin) : [0, 0]);
+  const windowText = (dir) => (DATA ? DATA.windows[dir].join("–") : "");
   function quantile(sorted, q) {
     if (!sorted.length) return NaN;
     const pos = (sorted.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
@@ -457,7 +462,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     for (const r of rows) {
       const tr = node("div", "tr", null, tip);
       const key = node("i", null, null, tr);
-      if (r.color) key.style.background = r.color; else key.style.background = "transparent";
+      key.style.background = r.color || "transparent";
       node("strong", null, r.value, tr);
       if (r.label) node("span", null, r.label, tr);
     }
@@ -483,9 +488,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   const STORE = "commute-dashboard-filters";
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; } catch (e) { saved = {}; }
-  const latest = latestOf(trips.filter((t) => t.src === "live")) || latestOf(trips);
   const state = {
-    dir: DIR_LABEL[saved.dir] ? saved.dir : (latest ? latest.dir : "to_office"),
     period: ["7", "30", "all"].includes(saved.period) ? saved.period : "all",
     src: ["live", "predicted", "both"].includes(saved.src) ? saved.src : (hasSrc("live") ? "live" : "predicted"),
   };
@@ -496,13 +499,33 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   function selectedSources() {
     return (state.src === "both" ? ["live", "predicted"] : [state.src]).filter(hasSrc);
   }
-  function filtered() {
+  function inWindow(t) {
+    const [ws, we] = windowOf(t.dir);
+    const s = slotOf(t.min);
+    return s >= ws && s <= we;
+  }
+  function filtered(dir) {
     const cutoff = state.period === "all" || !genDate ? null : addDays(genDate, -(Number(state.period) - 1));
     const srcs = selectedSources();
-    return trips.filter((t) => t.dir === state.dir && srcs.includes(t.src) && (!cutoff || t.date >= cutoff));
+    return trips.filter((t) => (!dir || t.dir === dir) && srcs.includes(t.src) && (!cutoff || t.date >= cutoff) && inWindow(t));
   }
 
-  // ---------- summary ----------
+  // ---------- columns ----------
+  const cols = {};
+  for (const dir of DIRS) {
+    const frag = $("dir-tpl").content.cloneNode(true);
+    const section = frag.querySelector(".dir");
+    section.setAttribute("aria-label", DIR_META[dir].label);
+    const el = {};
+    section.querySelectorAll("[data-role]").forEach((e) => { el[e.dataset.role] = e; });
+    el.eyebrow.textContent = DIR_META[dir].eyebrow;
+    el.title.textContent = DIR_META[dir].title;
+    el.window.textContent = windowText(dir);
+    $("dirs").appendChild(frag);
+    cols[dir] = el;
+  }
+
+  // ---------- best-time card ----------
   function slotStats(rows) {
     return [...groupBy(rows, (r) => slotOf(r.min)).entries()]
       .map(([slot, rs]) => ({ slot, ...stats(rs.map((r) => r.m)) }))
@@ -522,48 +545,44 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     good: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="#0ca30c"/><path d="M4.2 7.2l1.9 1.9 3.8-4" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     info: '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="#2a78d6"/><rect x="6.2" y="6" width="1.6" height="4.6" rx=".8" fill="#fff"/><circle cx="7" cy="4" r=".95" fill="#fff"/></svg>',
   };
-  function setPill(kind, text) {
-    const pill = $("k-confidence");
+  function setPill(pill, kind, text) {
     pill.className = "pill " + kind;
     pill.innerHTML = ICON[kind];
     pill.appendChild(document.createTextNode(text));
     pill.hidden = false;
   }
+  function setStat(dd, value, small) {
+    dd.textContent = value;
+    if (small) node("small", null, small, dd);
+  }
 
-  function renderSummary(rows, primary) {
+  function renderCard(dir, el, rows, primary) {
     const pr = rows.filter((r) => r.src === primary);
-    const set = (id, text) => { $(id).textContent = text; };
-    const setFig = (id, value, unit) => { const e = $(id); e.textContent = value; node("span", "unit", unit, e); };
     if (!pr.length) {
-      ["k-best", "k-worst", "k-saved", "k-delay", "k-trips"].forEach((id) => set(id, "—"));
-      set("k-best-detail", "No trips in this view yet.");
-      ["k-worst-detail", "k-delay-detail", "k-trips-detail"].forEach((id) => set(id, ""));
-      $("k-confidence").hidden = true;
+      el.best.textContent = "—";
+      el["best-detail"].textContent = "No trips " + DIR_META[dir].leaving + " between " + DATA.windows[dir][0] + " and " + DATA.windows[dir][1] + " yet.";
+      ["worst", "saved", "delay", "trips"].forEach((k) => setStat(el[k], "—"));
+      el.confidence.hidden = true;
       return;
     }
     const { best, worst } = bestWorst(slotStats(pr));
-    set("k-best", hhmm(best.slot));
-    set("k-best-detail", f1(best.med) + " min typical" + (best.n >= 3 ? " · 9 in 10 trips under " + f1(best.p90) + " min" : " · " + plural(best.n, "trip") + " so far"));
-    set("k-worst", hhmm(worst.slot));
-    set("k-worst-detail", f1(worst.med) + " min typical");
-    const savedMin = worst.med - best.med;
-    setFig("k-saved", f1(savedMin), "min");
-    set("k-saved-detail", "leaving at " + hhmm(best.slot) + " instead of " + hhmm(worst.slot));
-    const delays = pr.filter((r) => r.sm).map((r) => r.m - r.sm);
-    const empty = pr.filter((r) => r.sm).map((r) => r.sm);
-    if (delays.length) {
-      setFig("k-delay", "+" + f1(stats(delays).med), "min");
-      set("k-delay-detail", "typical, on top of " + f1(stats(empty).med) + " min on empty roads");
-    } else { set("k-delay", "—"); set("k-delay-detail", ""); }
+    el.best.textContent = hhmm(best.slot);
+    el["best-detail"].textContent = f1(best.med) + " min typical" +
+      (best.n >= 3 ? " · 9 in 10 trips under " + f1(best.p90) + " min" : " · " + plural(best.n, "trip") + " so far");
+    setStat(el.worst, hhmm(worst.slot), f1(worst.med) + " min");
+    setStat(el.saved, f1(worst.med - best.med) + " min", "vs " + hhmm(worst.slot));
+    const withEmpty = pr.filter((r) => r.sm);
+    if (withEmpty.length) {
+      const delay = stats(withEmpty.map((r) => r.m - r.sm)).med;
+      setStat(el.delay, (delay < 0 ? "−" : "+") + f1(Math.abs(delay)) + " min", f1(stats(withEmpty.map((r) => r.sm)).med) + " min empty");
+    } else setStat(el.delay, "—");
     const days = new Set(pr.map((r) => r.date)).size;
-    set("k-trips", String(pr.length));
-    const last = latestOf(pr);
-    set("k-trips-detail", plural(days, primary === "live" ? "workday" : "forecast day") + " · latest " + fmtDate(last.date) + ", " + hhmm(last.min));
+    setStat(el.trips, String(pr.length), plural(days, primary === "live" ? "workday" : "forecast day"));
 
-    if (primary === "predicted") setPill("info", "Google’s forecast, not measured");
-    else if (days < 5) setPill("warn", "Early estimate · " + plural(days, "workday"));
-    else if (days < 15) setPill("warn", "Firming up · " + days + " workdays");
-    else setPill("good", "Reliable · " + days + " workdays");
+    if (primary === "predicted") setPill(el.confidence, "info", "Google’s forecast, not measured");
+    else if (days < 5) setPill(el.confidence, "warn", "Early estimate · " + plural(days, "workday"));
+    else if (days < 15) setPill(el.confidence, "warn", "Firming up · " + days + " workdays");
+    else setPill(el.confidence, "good", "Reliable · " + days + " workdays");
   }
 
   // ---------- departure-time profile ----------
@@ -572,13 +591,13 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     if (srcs.length > 1) {
       for (const s of srcs) {
         const item = node("span", null, null, container);
-        const k = node("i", "key-line", null, item); k.style.setProperty("--k", SRC_COLOR[s]);
+        node("i", "key-line", null, item).style.setProperty("--k", SRC_COLOR[s]);
         item.appendChild(document.createTextNode(SRC_LABEL[s]));
       }
     }
     if (withBand) {
       const item = node("span", null, null, container);
-      const k = node("i", "key-band", null, item); k.style.setProperty("--k", SRC_COLOR[srcs[0]]);
+      node("i", "key-band", null, item).style.setProperty("--k", SRC_COLOR[srcs[0]]);
       item.appendChild(document.createTextNode(withBand));
     }
     if (withRef) {
@@ -588,21 +607,20 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     }
   }
 
-  function renderProfile(rows, srcs) {
-    const box = $("profile");
+  function renderProfile(dir, el, rows, srcs) {
+    const box = el.profile;
     box.replaceChildren();
-    legendFor($("profile-legend"), srcs, rows.length ? "Middle 80% of trips" : null, rows.some((r) => r.sm) ? "Empty roads" : null);
+    legendFor(el["profile-legend"], srcs, rows.length ? "Middle 80%" : null, rows.some((r) => r.sm) ? "Empty roads" : null);
     if (!rows.length) {
-      const [ws, we] = DATA.windows[state.dir];
-      emptyState(box, "No " + DIR_LABEL[state.dir] + " trips in this view yet. The tracker records them on workdays between " + ws + " and " + we + ".");
+      emptyState(box, "No trips " + DIR_META[dir].leaving + " in this view yet. The tracker records them every 15 minutes on workdays between " + DATA.windows[dir][0] + " and " + DATA.windows[dir][1] + ".");
       return;
     }
-    const W = Math.max(300, box.clientWidth || 600);
-    const H = W < 560 ? 260 : 300;
-    const M = { l: 38, r: 12, t: 30, b: 28 };
+    const W = Math.max(280, box.clientWidth || 520);
+    const H = W < 480 ? 240 : 270;
+    const M = { l: 36, r: 12, t: 30, b: 28 };
     const iw = W - M.l - M.r, ih = H - M.t - M.b;
-    const [ws, we] = DATA.windows[state.dir].map(toMin);
-    const x0 = Math.min(ws, ...rows.map((r) => slotOf(r.min)));
+    const [ws, we] = windowOf(dir);
+    const x0 = ws;
     const x1 = Math.max(we, ...rows.map((r) => r.min));
     const series = srcs.map((src) => {
       const rs = rows.filter((r) => r.src === src);
@@ -612,13 +630,13 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     const vals = rows.map((r) => r.m);
     series.forEach((s) => s.pts.forEach((p) => vals.push(p.p10, p.p90)));
     if (!Number.isNaN(emptyMed)) vals.push(emptyMed);
-    const sc = niceScale(Math.min(...vals), Math.max(...vals), H < 280 ? 4 : 5);
+    const sc = niceScale(Math.min(...vals), Math.max(...vals), 4);
     const x = (m) => M.l + (x1 === x0 ? iw / 2 : ((m - x0) / (x1 - x0)) * iw);
     const y = (v) => M.t + ih - ((v - sc.lo) / (sc.hi - sc.lo)) * ih;
 
     const root = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img", tabindex: "0" }, box);
     const best0 = series.length ? bestWorst(series[0].pts) : {};
-    root.setAttribute("aria-label", DIR_LABEL[state.dir] + " drive time by departure time. " +
+    root.setAttribute("aria-label", DIR_META[dir].label + " drive time by departure time. " +
       (best0.best ? "Fastest typical departure " + hhmm(best0.best.slot) + " at " + f1(best0.best.med) + " minutes; slowest " + hhmm(best0.worst.slot) + " at " + f1(best0.worst.med) + " minutes." : "") +
       " Use left and right arrow keys to read each slot.");
 
@@ -629,9 +647,10 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     svgEl("line", { class: "axis", x1: M.l, x2: W - M.r, y1: M.t + ih, y2: M.t + ih }, root);
     const span = x1 - x0;
     const pxPerHour = span > 0 ? iw / (span / 60) : iw;
-    const hourStep = pxPerHour >= 110 ? 30 : pxPerHour >= 48 ? 60 : 120;
-    for (let m = Math.ceil(x0 / hourStep) * hourStep; m <= x1; m += hourStep) {
-      svgEl("text", { class: "tick", x: x(m), y: H - 8, "text-anchor": "middle" }, root).textContent = hhmm(m);
+    const step = pxPerHour >= 200 ? 15 : pxPerHour >= 110 ? 30 : 60;
+    for (let m = Math.ceil(x0 / step) * step; m <= x1; m += step) {
+      const anchor = m === x0 ? "start" : m >= x1 - 2 ? "end" : "middle";
+      svgEl("text", { class: "tick", x: x(m), y: H - 8, "text-anchor": anchor }, root).textContent = hhmm(m);
     }
     if (!Number.isNaN(emptyMed)) {
       const bestRight = best0.best && x(best0.best.slot) > M.l + iw / 2;
@@ -732,17 +751,15 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   }
 
   // ---------- heatmap ----------
-  function renderHeat(rows, primary) {
-    const grid = $("heat"), scale = $("heat-scale");
+  function renderHeat(dir, el, rows, primary) {
+    const grid = el.heat, scale = el["heat-scale"];
     grid.replaceChildren(); scale.replaceChildren();
     const pr = rows.filter((r) => r.src === primary);
-    $("heat-sub").textContent = "Typical minutes for each weekday and departure slot" + (state.src === "both" ? ", from live readings." : ".");
+    el["heat-sub"].textContent = "Typical minutes for each weekday and departure slot" + (state.src === "both" ? ", from live readings." : ".");
     if (!pr.length) { grid.style.gridTemplateColumns = "1fr"; emptyState(grid, "The week view fills in as trips are recorded."); return; }
-    const [ws, we] = DATA.windows[state.dir].map(toMin);
-    const slotSet = new Set();
-    for (let m = ws; m <= we; m += SLOT) slotSet.add(m);
-    pr.forEach((r) => slotSet.add(slotOf(r.min)));
-    const slots = [...slotSet].sort((a, b) => a - b);
+    const [ws, we] = windowOf(dir);
+    const slots = [];
+    for (let m = ws; m <= we; m += SLOT) slots.push(m);
     const days = [...new Set([0, 1, 2, 3, 4, ...pr.map((r) => r.wd)])].sort((a, b) => a - b);
     const cells = new Map();
     for (const [k, rs] of groupBy(pr, (r) => r.wd + "|" + slotOf(r.min))) cells.set(k, stats(rs.map((r) => r.m)));
@@ -753,7 +770,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     const minSpan = Math.max(4, lo * 0.25);
     if (hi - lo < minSpan) hi = lo + minSpan;
 
-    grid.style.gridTemplateColumns = "40px repeat(" + slots.length + ", minmax(38px, 1fr))";
+    grid.style.gridTemplateColumns = "38px repeat(" + slots.length + ", minmax(38px, 1fr))";
     node("div", null, null, grid);
     for (const s of slots) node("div", "col" + (s % 60 === 0 ? " hour" : ""), hhmm(s), grid);
     for (const d of days) {
@@ -768,7 +785,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
         cell.tabIndex = 0;
         const label = WD[d] + " " + hhmm(s);
         const detail = (c.n > 1 ? f1(c.lo) + "–" + f1(c.hi) + " min · " : "") + plural(c.n, "trip");
-        cell.setAttribute("aria-label", label + ": " + f1(c.med) + " minutes typical, " + detail);
+        cell.setAttribute("aria-label", "Leaving " + label + ": " + f1(c.med) + " minutes typical, " + detail);
         const show = (e) => {
           const rowsTip = [{ value: f1(c.med) + " min", label: detail }];
           if (e && e.clientX != null) showTip(e.clientX, e.clientY, "Leaving " + label, rowsTip);
@@ -787,10 +804,10 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   }
 
   // ---------- daily trend ----------
-  function renderDaily(rows, srcs) {
-    const box = $("daily");
+  function renderDaily(dir, el, rows, srcs) {
+    const box = el.daily;
     box.replaceChildren();
-    legendFor($("daily-legend"), srcs, rows.length ? "Fastest to slowest" : null, null);
+    legendFor(el["daily-legend"], srcs, rows.length ? "Fastest to slowest" : null, null);
     if (!rows.length) { emptyState(box, "Each workday adds a point here."); return; }
     const series = srcs.map((src) => {
       const by = groupBy(rows.filter((r) => r.src === src), (r) => r.date);
@@ -802,15 +819,15 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
       return { src, pts };
     }).filter((s) => s.pts.length);
     const dates = [...new Set(series.flatMap((s) => s.pts.map((p) => p.date)))].sort();
-    const W = Math.max(300, box.clientWidth || 500), H = 240;
-    const M = { l: 38, r: 54, t: 16, b: 28 };
+    const W = Math.max(280, box.clientWidth || 500), H = 220;
+    const M = { l: 36, r: 54, t: 16, b: 28 };
     const iw = W - M.l - M.r, ih = H - M.t - M.b;
     const vals = series.flatMap((s) => s.pts.flatMap((p) => [p.lo, p.hi]));
     const sc = niceScale(Math.min(...vals), Math.max(...vals), 4);
     const x = (i) => M.l + (dates.length === 1 ? iw / 2 : (i / (dates.length - 1)) * iw);
     const y = (v) => M.t + ih - ((v - sc.lo) / (sc.hi - sc.lo)) * ih;
     const root = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img", tabindex: "0" }, box);
-    root.setAttribute("aria-label", "Typical drive time per day for " + plural(dates.length, "day") + ". Use left and right arrow keys to read each day.");
+    root.setAttribute("aria-label", DIR_META[dir].label + " typical drive time per day for " + plural(dates.length, "day") + ". Use left and right arrow keys to read each day.");
     for (const t of sc.ticks) {
       svgEl("line", { class: "grid", x1: M.l, x2: W - M.r, y1: y(t), y2: y(t) }, root);
       svgEl("text", { class: "tick", x: M.l - 6, y: y(t), "text-anchor": "end", dy: "0.32em" }, root).textContent = String(t);
@@ -879,22 +896,19 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
       else if (e.key === "ArrowLeft") { showDay(idx - 1); e.preventDefault(); }
       else if (e.key === "Escape") clear();
     });
-    if (dates.length < 3) {
-      const note = node("p", "table-note", "The trend line appears once there are a few workdays of data.", box);
-      note.style.margin = "6px 0 0";
-    }
+    if (dates.length < 3) node("p", "note", "The trend line appears once there are a few workdays of data.", box);
   }
 
   // ---------- routes ----------
-  function renderRoutes(rows) {
-    const box = $("routes");
+  function renderRoutes(el, rows) {
+    const box = el.routes;
     box.replaceChildren();
     if (!rows.length) { emptyState(box, "Routes appear once trips are recorded."); return; }
     const groups = [...groupBy(rows, (r) => r.via).entries()]
       .map(([via, rs]) => ({ via, n: rs.length, med: stats(rs.map((r) => r.m)).med, km: stats(rs.filter((r) => r.km).map((r) => r.km)).med }))
       .sort((a, b) => b.n - a.n);
-    const shown = groups.slice(0, 5);
-    const rest = groups.slice(5);
+    const shown = groups.slice(0, 4);
+    const rest = groups.slice(4);
     if (rest.length) shown.push({ via: "Other routes", n: rest.reduce((a, g) => a + g.n, 0), med: NaN, km: NaN });
     for (const g of shown) {
       const row = node("div", "route", null, box);
@@ -912,15 +926,16 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     const body = $("trips-body");
     body.replaceChildren();
     const sorted = rows.slice().sort((a, b) => (a.date === b.date ? b.min - a.min : a.date < b.date ? 1 : -1));
-    const limit = 150;
-    $("trips-count").textContent = plural(rows.length, "trip") + " · " + DIR_LABEL[state.dir];
+    const limit = 200;
+    $("trips-count").textContent = plural(rows.length, "trip") + " inside the windows";
     for (const r of sorted.slice(0, limit)) {
       const tr = node("tr", null, null, body);
       node("td", null, fmtDate(r.date), tr);
+      node("td", null, DIR_META[r.dir].label, tr);
       node("td", "num", hhmm(r.min), tr);
       node("td", "r", f1(r.m) + " min", tr);
       node("td", "r", r.sm ? f1(r.sm) + " min" : "—", tr);
-      node("td", "r", r.sm ? (r.m - r.sm >= 0 ? "+" : "") + f1(r.m - r.sm) + " min" : "—", tr);
+      node("td", "r", r.sm ? (r.m - r.sm < 0 ? "−" : "+") + f1(Math.abs(r.m - r.sm)) + " min" : "—", tr);
       node("td", null, r.via, tr);
       node("td", null, SRC_LABEL[r.src], tr);
     }
@@ -929,7 +944,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
 
   // ---------- controls ----------
   function syncControls() {
-    for (const [group, key] of [["f-dir", "dir"], ["f-period", "period"], ["f-src", "src"]]) {
+    for (const [group, key] of [["f-period", "period"], ["f-src", "src"]]) {
       for (const b of $(group).querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.v === state[key]));
     }
     const noForecast = !hasSrc("predicted"), noLive = !hasSrc("live");
@@ -938,7 +953,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     $("src-live").disabled = noLive;
     $("filter-note").textContent = noForecast ? "Run predict to add Google’s 7-day forecast." : "";
   }
-  for (const [group, key] of [["f-dir", "dir"], ["f-period", "period"], ["f-src", "src"]]) {
+  for (const [group, key] of [["f-period", "period"], ["f-src", "src"]]) {
     $(group).addEventListener("click", (e) => {
       const b = e.target.closest("button");
       if (!b || b.disabled || state[key] === b.dataset.v) return;
@@ -951,27 +966,29 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   function render() {
     hideTip();
     syncControls();
-    const rows = filtered();
     const srcs = selectedSources();
-    const primary = srcs.includes("live") && rows.some((r) => r.src === "live") ? "live" : (srcs[0] || "live");
-    renderSummary(rows, primary);
-    renderProfile(rows, srcs);
-    renderHeat(rows, primary);
-    renderDaily(rows, srcs);
-    renderRoutes(rows.filter((r) => r.src === primary));
-    renderTable(rows);
+    for (const dir of DIRS) {
+      const rows = filtered(dir);
+      const el = cols[dir];
+      const primary = srcs.includes("live") && rows.some((r) => r.src === "live") ? "live" : (srcs[0] || "live");
+      renderCard(dir, el, rows, primary);
+      renderProfile(dir, el, rows, srcs);
+      renderHeat(dir, el, rows, primary);
+      renderDaily(dir, el, rows, srcs);
+      renderRoutes(el, rows.filter((r) => r.src === primary));
+    }
+    renderTable(filtered(null));
   }
 
   if (!DATA) {
     $("fresh").textContent = "No data embedded";
-    emptyState($("profile"), "Open the page made by python commute_tracker.py dashboard, which fills in your recorded trips.");
     return;
   }
   const lastLive = latestOf(trips.filter((t) => t.src === "live"));
   $("fresh").textContent = lastLive
-    ? "Latest reading " + fmtDate(lastLive.date) + ", " + hhmm(lastLive.min) + " · " + plural(trips.length, "trip")
-    : "Snapshot " + fmtDate(genDate) + " · " + plural(trips.length, "trip");
-  $("foot-source").textContent = "Drive times come from the Google Routes API with live traffic (" + DATA.routing + "). Snapshot made " + fmtDate(genDate) + ", " + DATA.generated.slice(11, 16) + " PKT.";
+    ? "Latest reading " + fmtDate(lastLive.date) + ", " + hhmm(lastLive.min)
+    : "Snapshot " + fmtDate(genDate);
+  $("foot-source").textContent = "Drive times come from the Google Routes API with live traffic (" + DATA.routing + "). Page built " + fmtDate(genDate) + ", " + DATA.generated.slice(11, 16) + " PKT.";
 
   render();
   let lastW = 0, timer = 0;

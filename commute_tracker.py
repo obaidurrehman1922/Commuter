@@ -35,8 +35,8 @@ HOME = "Shayyan Furniture, Chah Miran, Lahore, Pakistan"
 OFFICE = "04 Old FCC Road, Lahore, Pakistan"
 
 TZ = ZoneInfo("Asia/Karachi")
-MORNING_WINDOW = (dtime(7, 0), dtime(10, 30))  # home -> office
-EVENING_WINDOW = (dtime(16, 30), dtime(21, 0))  # office -> home
+MORNING_WINDOW = (dtime(9, 0), dtime(11, 0))  # home -> office
+EVENING_WINDOW = (dtime(19, 0), dtime(21, 0))  # office -> home
 SLOT_MINUTES = 15
 WORKDAYS = {0, 1, 2, 3, 4}  # Mon-Fri (Monday = 0)
 PREDICT_DAYS = 7
@@ -344,6 +344,12 @@ def cmd_report(source: str) -> int:
     df["slot"] = depart.dt.floor(f"{SLOT_MINUTES}min").dt.strftime("%H:%M")
     df["minutes"] = df["duration_s"] / 60
     df["congestion"] = df["duration_s"] / df["static_s"].where(df["static_s"] > 0)
+    # Only departures inside each direction's window count (e.g. older readings from wider windows).
+    window_bounds = {d: (w[0].strftime("%H:%M"), w[1].strftime("%H:%M")) for d, (_, _, w) in DIRECTIONS.items()}
+    df = df[[window_bounds[d][0] <= slot <= window_bounds[d][1] for d, slot in zip(df["direction"], df["slot"])]]
+    if df.empty:
+        log.error("No %s trips inside the commute windows yet", source)
+        return 1
 
     directions = [d for d in DIRECTIONS if d in set(df["direction"])]
     fig, axes = plt.subplots(
@@ -354,7 +360,7 @@ def cmd_report(source: str) -> int:
     for ax, direction in zip(axes[:, 0], directions):
         sub = df[df["direction"] == direction]
         window = DIRECTIONS[direction][2]
-        slots = sorted({s.strftime("%H:%M") for s in window_slots(now_local().date(), window)} | set(sub["slot"]))
+        slots = [s.strftime("%H:%M") for s in window_slots(now_local().date(), window)]
         days = sorted(WORKDAYS | set(sub["weekday"]))
         grid = sub.pivot_table(index="weekday", columns="slot", values="minutes", aggfunc="median")
         grid = grid.reindex(index=days, columns=slots)

@@ -14,9 +14,10 @@ dashboard and publishes it with GitHub Pages at
 | Office → Home (`to_home`) | 19:00–21:00 |
 
 The windows only decide where departure times are suggested. The dashboard shows both
-legs side by side: each has a 24-hour traffic chart built from every reading, and a best time
-to leave, window chart, week view and daily trend that count only departures inside that
-leg's window. The report does the same.
+legs side by side. Each has a 24-hour traffic chart and an hour-by-hour week heatmap built
+from every reading, with the window marked, plus a best time to leave, window chart and daily
+trend that count only departures inside that leg's window. The `report` command's
+suggestions and heatmap also cover only the windows.
 
 > **Privacy.** The code contains your home and office addresses, and `commute.db` records
 > when you travel between them. Keep the repository private if you can; on a free GitHub

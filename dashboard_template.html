@@ -192,6 +192,17 @@ svg .win-label { fill: var(--ink-2); font: 600 11px var(--font-body); }
   font: 600 12px var(--font-body); font-variant-numeric: tabular-nums;
   background: var(--surface-2); color: var(--muted);
 }
+.heat .wmark { height: 20px; position: relative; }
+.heat .wmark.on { border-bottom: 2px solid var(--accent); }
+.heat .wmark.label::before {
+  content: "Your window"; position: absolute; left: 0; bottom: 4px;
+  font-size: 11px; font-weight: 600; color: var(--ink-2); white-space: nowrap;
+}
+.heat .wmark.label.end::before { left: auto; right: 0; }
+.heat .col.win { color: var(--ink); font-weight: 700; }
+.heat.hours { gap: 2px 1px; }
+.heat.hours .col { font-size: 10px; }
+.heat.hours .cell { height: 30px; font-size: 11px; border-radius: 3px; }
 .heat .cell[tabindex] { cursor: default; }
 .heat .cell[tabindex]:hover { filter: brightness(1.08); }
 .scale { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--ink-2); flex-wrap: wrap; }
@@ -235,7 +246,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
 .tip .tr strong { font-size: 14px; font-variant-numeric: tabular-nums; }
 .tip .tr span { grid-column: 2; color: var(--muted); }
 
-@media (max-width: 980px) {
+@media (max-width: 1100px) {
   .dirs { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 420px) {
@@ -291,7 +302,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
 
   <footer class="foot">
     <p id="foot-source">Drive times come from the Google Routes API with live traffic.</p>
-    <p>“Through the day” uses every recorded trip; everything else in a column counts only trips that leave inside that window. Trips are grouped into 15-minute slots by departure time, so a trip at 19:41 counts as 19:30. “Empty roads” is Google’s estimate for the same route with no traffic.</p>
+    <p>“Through the day” and “Week at a glance” use every recorded trip; the best time, “Inside your window” and “Day by day” count only trips that leave inside that window. Trips are grouped into 15-minute slots by departure time, so a trip at 19:41 counts as 19:30. “Empty roads” is Google’s estimate for the same route with no traffic.</p>
     <p>The page is rebuilt from <code>commute.db</code> after every recorded trip. Reload it to see the latest readings.</p>
   </footer>
 </div>
@@ -329,22 +340,22 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     <div class="panel">
       <div class="panel-head">
         <div>
+          <h3>Week at a glance</h3>
+          <p data-role="heat-sub">Typical minutes for each weekday and hour of the day, from every recorded trip.</p>
+        </div>
+      </div>
+      <div class="heat-scroll"><div class="heat" data-role="heat"></div></div>
+      <div class="scale" data-role="heat-scale"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
           <h3>Inside your window</h3>
           <p>Typical minutes for each 15-minute slot. The band covers the middle 80% of trips.</p>
         </div>
         <div class="legend" data-role="profile-legend"></div>
       </div>
       <div class="chart" data-role="profile"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-head">
-        <div>
-          <h3>Week at a glance</h3>
-          <p data-role="heat-sub">Typical minutes for each weekday and departure slot.</p>
-        </div>
-      </div>
-      <div class="heat-scroll"><div class="heat" data-role="heat"></div></div>
-      <div class="scale" data-role="heat-scale"></div>
     </div>
     <div class="panel">
       <div class="panel-head">
@@ -871,15 +882,18 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   function renderHeat(dir, el, rows, primary) {
     const grid = el.heat, scale = el["heat-scale"];
     grid.replaceChildren(); scale.replaceChildren();
+    grid.classList.add("hours");
     const pr = rows.filter((r) => r.src === primary);
-    el["heat-sub"].textContent = "Typical minutes for each weekday and departure slot" + (state.src === "both" ? ", from live readings." : ".");
+    el["heat-sub"].textContent = "Typical minutes for each weekday and hour of the day, from every recorded " +
+      (state.src === "both" ? "live reading." : "trip.");
     if (!pr.length) { grid.style.gridTemplateColumns = "1fr"; emptyState(grid, "The week view fills in as trips are recorded."); return; }
+    const hours = Array.from({ length: 24 }, (_, h) => h);
     const [ws, we] = windowOf(dir);
-    const slots = [];
-    for (let m = ws; m <= we; m += SLOT) slots.push(m);
+    const winHours = new Set();
+    for (let m = ws; m <= we; m += SLOT) winHours.add(Math.floor(m / 60));
     const days = [...new Set([0, 1, 2, 3, 4, ...pr.map((r) => r.wd)])].sort((a, b) => a - b);
     const cells = new Map();
-    for (const [k, rs] of groupBy(pr, (r) => r.wd + "|" + slotOf(r.min))) cells.set(k, stats(rs.map((r) => r.m)));
+    for (const [k, rs] of groupBy(pr, (r) => r.wd + "|" + Math.floor(r.min / 60))) cells.set(k, stats(rs.map((r) => r.m)));
     const meds = [...cells.values()].map((c) => c.med);
     const emptyMed = stats(pr.filter((r) => r.sm).map((r) => r.sm)).med;
     const lo = Number.isNaN(emptyMed) ? Math.min(...meds) : Math.min(emptyMed, ...meds);
@@ -887,21 +901,31 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     const minSpan = Math.max(4, lo * 0.25);
     if (hi - lo < minSpan) hi = lo + minSpan;
 
-    grid.style.gridTemplateColumns = "38px repeat(" + slots.length + ", minmax(38px, 1fr))";
+    grid.style.gridTemplateColumns = "36px repeat(24, minmax(16px, 1fr))";
+    // marker row: a bar over the hours that hold your window's departure slots, labelled at
+    // its start (or at its end for a late window, so the label stays inside the grid)
+    const firstWin = Math.min(...winHours), lastWin = Math.max(...winHours);
+    const labelAtEnd = firstWin >= 16;
     node("div", null, null, grid);
-    for (const s of slots) node("div", "col" + (s % 60 === 0 ? " hour" : ""), hhmm(s), grid);
+    for (const h of hours) {
+      const on = winHours.has(h);
+      const label = on && (labelAtEnd ? h === lastWin : h === firstWin);
+      node("div", "wmark" + (on ? " on" : "") + (label ? " label" + (labelAtEnd ? " end" : "") : ""), null, grid);
+    }
+    node("div", null, null, grid);
+    for (const h of hours) node("div", "col" + (winHours.has(h) ? " win" : ""), pad(h), grid);
     for (const d of days) {
       node("div", "row", WD[d], grid);
-      for (const s of slots) {
-        const c = cells.get(d + "|" + s);
+      for (const h of hours) {
+        const c = cells.get(d + "|" + h);
         const cell = node("div", "cell", c ? String(Math.round(c.med)) : "·", grid);
         if (!c) { cell.setAttribute("aria-hidden", "true"); continue; }
         const rgb = heatColor((c.med - lo) / (hi - lo));
         cell.style.background = rgbStr(rgb);
         cell.style.color = inkFor(rgb);
         cell.tabIndex = 0;
-        const label = WD[d] + " " + hhmm(s);
-        const detail = (c.n > 1 ? f1(c.lo) + "–" + f1(c.hi) + " min · " : "") + plural(c.n, "trip");
+        const label = WD[d] + " " + pad(h) + ":00–" + pad(h) + ":59";
+        const detail = (c.n > 1 ? f1(c.lo) + "–" + f1(c.hi) + " min · " : "") + plural(c.n, "trip") + (winHours.has(h) ? " · your window" : "");
         cell.setAttribute("aria-label", "Leaving " + label + ": " + f1(c.med) + " minutes typical, " + detail);
         const show = (e) => {
           const rowsTip = [{ value: f1(c.med) + " min", label: detail }];
@@ -1091,7 +1115,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
       renderCard(dir, el, rows, primary);
       renderDay(dir, el, filtered(dir, true).filter((r) => r.src === primary));
       renderProfile(dir, el, rows, srcs);
-      renderHeat(dir, el, rows, primary);
+      renderHeat(dir, el, filtered(dir, true), primary);
       renderDaily(dir, el, rows, srcs);
       renderRoutes(el, rows.filter((r) => r.src === primary));
     }

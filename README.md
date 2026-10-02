@@ -2,9 +2,9 @@
 
 Finds the best time to leave for the daily drive between home (Shayyan Furniture, Chah Miran)
 and the office (04 Old FCC Road) in Lahore.
-A GitHub Actions job asks the Google Routes API for the drive time with live traffic every
-15 minutes during the commute windows and stores each result in `commute.db` (SQLite), which
-is committed back to this repo. After each new trip the workflow rebuilds an interactive
+A GitHub Actions job asks the Google Routes API for the drive time with live traffic in both
+directions every 15 minutes, all day, on workdays, and stores each result in `commute.db`
+(SQLite), which is committed back to this repo. After each new trip the workflow rebuilds an interactive
 dashboard and publishes it with GitHub Pages at
 <https://obaidurrehman1922.github.io/Commuter/>.
 
@@ -13,9 +13,10 @@ dashboard and publishes it with GitHub Pages at
 | Home → Office (`to_office`) | 09:00–11:00 |
 | Office → Home (`to_home`) | 19:00–21:00 |
 
-The dashboard shows both legs side by side, each with its best time to leave. Only
-departures inside the windows count; readings from outside them stay in `commute.db` but
-are left out of the dashboard and the report.
+The windows only decide where departure times are suggested. The dashboard shows both
+legs side by side: each has a 24-hour traffic chart built from every reading, and a best time
+to leave, window chart, week view and daily trend that count only departures inside that
+leg's window. The report does the same.
 
 > **Privacy.** The code contains your home and office addresses, and `commute.db` records
 > when you travel between them. Keep the repository private if you can; on a free GitHub
@@ -38,11 +39,10 @@ are left out of the dashboard and the report.
 5. **Turn on GitHub Pages.** Open *Settings → Pages* and under *Build and deployment* set
    *Source* to **GitHub Actions**. On a free GitHub plan, Pages only works while the repo
    is public.
-6. **Check that it works.** Open *Actions → Commute tracker → Run workflow*. During a
-   commute window the *Record commute time* step logs `Recorded 1 of 1 live trip(s)` and a
-   `Record commute times …` commit appears; outside the windows it logs
-   `outside the commute windows`. Either way, a manual run also publishes the dashboard,
-   and the *pages* job shows its link.
+6. **Check that it works.** Open *Actions → Commute tracker → Run workflow*. On a workday
+   the *Record commute time* step logs `Recorded 2 of 2 live trip(s)` and a
+   `Record commute times …` commit appears; on a weekend it logs `not a workday`. Either
+   way, a manual run also publishes the dashboard, and the *pages* job shows its link.
 
 ### Dashboard website
 
@@ -55,11 +55,11 @@ The site is public: anyone with the link can see your drive times, departure tim
 roads Google chose. It doesn't include your addresses, and it asks search engines not to
 index it.
 
-The workflow's cron schedule is in UTC (Lahore is UTC+5) and fires every 15 minutes from
-09:00 to 11:00 and from 19:00 to 21:00 Lahore time. The script skips any run outside the
-windows without calling the API. GitHub often starts scheduled runs a few minutes late, so
-the script uses the 15-minute slot a run belongs to: a run starting at 10:37 still counts
-as the 10:30 slot. Under heavy load GitHub can also skip runs entirely.
+The workflow's cron schedule is in UTC (Lahore is UTC+5). It fires every 15 minutes from
+Sunday to Friday UTC, which covers Monday 00:00 to Friday 23:45 in Lahore, and the script
+skips any run that doesn't fall on a Lahore workday. GitHub often starts scheduled runs a few
+minutes late; each trip is grouped into the 15-minute slot it actually left in, so a run that
+starts at 10:37 counts as the 10:30 slot. Under heavy load GitHub can also skip runs entirely.
 
 ## Running locally
 
@@ -76,8 +76,8 @@ python commute_tracker.py report --source predicted
 
 | Command | What it does |
 |---|---|
-| `poll` | Records live traffic for the current window. Does nothing outside the windows or on weekends. |
-| `poll --force` | Records both directions right now, whatever the time. These are stored as ordinary `live` rows; the report and dashboard only count the ones inside a window. |
+| `poll` | Records live traffic in both directions. Does nothing on days outside `WORKDAYS` (weekends by default). |
+| `poll --force` | Records both directions even when today isn't a workday. |
 | `predict` | Asks for Google's traffic prediction at every 15-minute slot in the windows on each workday over the next 7 days (about 90 API calls). Rows are stored as `predicted`. |
 | `report [--source live\|predicted\|all]` | Writes `commute_heatmap.png` and prints the best 3 departure slots, the worst slot, the average congestion index and the most common routes for each direction. Defaults to `live`. |
 | `dashboard` | Writes `commute_dashboard.html`, an interactive page you open in a browser. It shows both directions side by side: the best time to leave home and the office, drive time by departure slot, a weekday heatmap, a day-by-day trend and the routes taken, with filters for period and live or forecast data. The page is built from `dashboard_template.html` with your trips embedded, so it works offline. |
@@ -111,17 +111,21 @@ The congestion index in the report is `duration_s / static_s`: 1.5 means the dri
 
 ## Costs and limits
 
-- **Routes API.** Scheduled polling makes about 18 calls per workday (around 400 a
-  month), and each `predict` run makes about 90. Requests use `TRAFFIC_AWARE_OPTIMAL`,
+- **Routes API.** Scheduled polling makes 192 calls per workday (96 runs × 2 directions),
+  about 4,200 a month, and each `predict` run makes about 90. That is close to the 5,000
+  free requests a month on the Pro tier; past that, Google charges $10 per 1,000. Recording
+  weekends too (add 5 and 6 to `WORKDAYS`) would take it to about 5,800 a month. Requests use `TRAFFIC_AWARE_OPTIMAL`,
   Google's most accurate traffic mode (set by `ROUTING_PREFERENCE` in the script). It is
   billed at the Routes API's Pro rate, the same as `TRAFFIC_AWARE`, which is higher than
   basic routing. Check the current
   [Google Maps Platform pricing](https://developers.google.com/maps/billing-and-pricing/pricing)
   and its free monthly allowance.
-- **GitHub Actions minutes.** Private repos get a limited number of free minutes a month,
-  and each run is billed as at least one minute. The schedule starts 18 runs per
-  workday, and each run that records a trip also runs the dashboard job, so expect roughly
-  800 minutes a month, within the Free plan's 2,000. Public repos don't use up minutes.
+- **GitHub Actions minutes.** Public repos don't use up minutes. A private repo on the
+  Free plan gets 2,000 a month, with each job billed as at least one minute, and this
+  schedule needs over 4,000 (a recording job and a dashboard job per run), so a private
+  repo would need a paid plan or a slower schedule.
+- **Repository size.** Every recorded run commits `commute.db`, about 96 commits a workday.
+  Expect the repository to grow by a few hundred megabytes a year.
 
 ## Troubleshooting
 

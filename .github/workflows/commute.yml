@@ -2,11 +2,9 @@ name: Commute tracker
 
 on:
   schedule:
-    # Times are UTC; Lahore is UTC+5. The script skips runs outside its windows.
-    - cron: "*/15 4-5 * * 1-5"   # 09:00-10:45 Lahore, leaving home
-    - cron: "0 6 * * 1-5"        # 11:00
-    - cron: "*/15 14-15 * * 1-5" # 19:00-20:45 Lahore, leaving the office
-    - cron: "0 16 * * 1-5"       # 21:00
+    # Every 15 minutes, all day. Cron is in UTC (Lahore is UTC+5), so Sunday-Friday UTC
+    # covers Monday 00:00 to Friday 23:45 in Lahore; the script skips non-workdays itself.
+    - cron: "*/15 * * * 0-5"
   workflow_dispatch:
 
 permissions:

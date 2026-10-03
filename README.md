@@ -62,6 +62,13 @@ skips any run that doesn't fall on a Lahore workday. GitHub often starts schedul
 minutes late; each trip is grouped into the 15-minute slot it actually left in, so a run that
 starts at 10:37 counts as the 10:30 slot. Under heavy load GitHub can also skip runs entirely.
 
+### Google's forecast
+
+Every Sunday at 20:20 Lahore time the workflow runs `predict` instead of `poll`. It stores
+Google's traffic forecast for every slot in both windows on the coming week's workdays, which
+fills the dashboard's *Google forecast* view. To refresh it at another time, open *Actions →
+Commute tracker → Run workflow* and choose `predict`.
+
 ## Running locally
 
 ```bash
@@ -83,11 +90,11 @@ python commute_tracker.py report --source predicted
 | `report [--source live\|predicted\|all]` | Writes `commute_heatmap.png` and prints the best 3 departure slots, the worst slot, the average congestion index and the most common routes for each direction. Defaults to `live`. |
 | `dashboard` | Writes `commute_dashboard.html`, an interactive page you open in a browser. It shows both directions side by side: the best time to leave home and the office, drive time by departure slot, a weekday heatmap, a day-by-day trend and the routes taken, with filters for period and live or forecast data. The page is built from `dashboard_template.html` with your trips embedded, so it works offline. |
 
-`predict` gives you a heatmap straight away. The live data from the scheduled job takes a
-few weeks to become reliable.
+`predict` gives you a heatmap straight away (the workflow also runs it every Sunday). The
+live data from the scheduled job takes a few weeks to become reliable.
 
 **Avoid conflicts on `commute.db`.** The workflow commits `commute.db` every 15 minutes
-during the windows, and git can't merge two versions of a binary file. If you keep local
+on workdays, and git can't merge two versions of a binary file. If you keep local
 changes (for example from `predict`), pull just before running, then commit and push right
 away. Otherwise discard them with `git checkout -- commute.db`. Running `report` doesn't
 change the database.
@@ -113,9 +120,10 @@ The congestion index in the report is `duration_s / static_s`: 1.5 means the dri
 ## Costs and limits
 
 - **Routes API.** Scheduled polling makes 192 calls per workday (96 runs × 2 directions),
-  about 4,200 a month, and each `predict` run makes about 90. That is close to the 5,000
-  free requests a month on the Pro tier; past that, Google charges $10 per 1,000. Recording
-  weekends too (add 5 and 6 to `WORKDAYS`) would take it to about 5,800 a month. Requests use `TRAFFIC_AWARE_OPTIMAL`,
+  about 4,200 a month, and the Sunday forecast adds about 90 a week, for roughly 4,600 to
+  4,900 a month. That fits inside the 5,000 free requests a month on the Pro tier, with
+  little to spare; past that, Google charges $10 per 1,000. Extra `predict` runs or recording
+  weekends too (add 5 and 6 to `WORKDAYS`) will go over. Requests use `TRAFFIC_AWARE_OPTIMAL`,
   Google's most accurate traffic mode (set by `ROUTING_PREFERENCE` in the script). It is
   billed at the Routes API's Pro rate, the same as `TRAFFIC_AWARE`, which is higher than
   basic routing. Check the current

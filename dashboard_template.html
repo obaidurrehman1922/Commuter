@@ -1092,7 +1092,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     $("src-predicted").disabled = noForecast;
     $("src-both").disabled = noForecast || noLive;
     $("src-live").disabled = noLive;
-    $("filter-note").textContent = noForecast ? "Run predict to add Google’s 7-day forecast." : "";
+    $("filter-note").textContent = noForecast ? "Google’s forecast for the coming week is added every Sunday evening." : "";
   }
   for (const [group, key] of [["f-period", "period"], ["f-src", "src"]]) {
     $(group).addEventListener("click", (e) => {

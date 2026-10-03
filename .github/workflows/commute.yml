@@ -5,7 +5,15 @@ on:
     # Every 15 minutes, all day. Cron is in UTC (Lahore is UTC+5), so Sunday-Friday UTC
     # covers Monday 00:00 to Friday 23:45 in Lahore; the script skips non-workdays itself.
     - cron: "*/15 * * * 0-5"
+    # Sunday 20:20 in Lahore: Google's traffic forecast for the coming week's windows.
+    - cron: "20 15 * * 0"
   workflow_dispatch:
+    inputs:
+      command:
+        description: "What to run"
+        type: choice
+        options: [poll, predict]
+        default: poll
 
 permissions:
   contents: read
@@ -22,6 +30,8 @@ jobs:
       contents: write
     outputs:
       changed: ${{ steps.commit.outputs.changed }}
+    env:
+      COMMAND: ${{ (github.event.schedule == '20 15 * * 0' || inputs.command == 'predict') && 'predict' || 'poll' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -35,7 +45,7 @@ jobs:
       - name: Record commute time
         env:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
-        run: python commute_tracker.py poll
+        run: python commute_tracker.py "$COMMAND"
 
       - name: Commit database
         id: commit
@@ -47,7 +57,8 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Record commute times $(date -u +'%Y-%m-%d %H:%M') UTC"
+          if [ "$COMMAND" = predict ]; then what="Record Google forecast"; else what="Record commute times"; fi
+          git commit -m "$what $(date -u +'%Y-%m-%d %H:%M') UTC"
           git pull --rebase
           git push
           echo "changed=true" >> "$GITHUB_OUTPUT"

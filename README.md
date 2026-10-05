@@ -3,7 +3,7 @@
 Finds the best time to leave for the daily drive between home (Shayyan Furniture, Chah Miran)
 and the office (04 Old FCC Road) in Lahore.
 A GitHub Actions job asks the Google Routes API for the drive time with live traffic in both
-directions every 15 minutes, all day, every day, and stores each result in `commute.db`
+directions every 15 minutes from 07:30 to midnight, every day, and stores each result in `commute.db`
 (SQLite), which is committed back to this repo. After each new trip the workflow rebuilds an interactive
 dashboard and publishes it with GitHub Pages at
 <https://obaidurrehman1922.github.io/Commuter/>.
@@ -26,7 +26,8 @@ suggestions and heatmap also cover only the windows.
 ## Setup
 
 1. **Check the addresses.** `HOME` and `OFFICE` are at the top of `commute_tracker.py`,
-   along with the windows, slot length, the days to track (`DAYS`) and time zone. After the first run, check
+   along with the windows, slot length, the days to track (`DAYS`), the hours to skip
+   (`QUIET_HOURS`, 00:00–07:30) and time zone. After the first run, check
    that the distance in the log matches the route in Google Maps. If Google placed an
    address in the wrong spot, make the address more specific.
 2. **Get a Google Maps API key.**
@@ -56,8 +57,10 @@ The site is public: anyone with the link can see your drive times, departure tim
 roads Google chose. It doesn't include your addresses, and it asks search engines not to
 index it.
 
-The workflow fires every 15 minutes, every day (its cron schedule is in UTC; Lahore is
-UTC+5). To skip some days, remove them from `DAYS` in the script. GitHub often starts scheduled runs a few
+The workflow fires every 15 minutes from 07:30 to 23:45 Lahore time, every day (its cron
+schedule is in UTC, Lahore is UTC+5, so that is 02:30 to 18:45 UTC). The script also skips
+`QUIET_HOURS` and any day left out of `DAYS`, so if you change either, change the cron lines
+to match. GitHub often starts scheduled runs a few
 minutes late; each trip is grouped into the 15-minute slot it actually left in, so a run that
 starts at 10:37 counts as the 10:30 slot. Under heavy load GitHub can also skip runs entirely.
 
@@ -83,8 +86,8 @@ python commute_tracker.py report --source predicted
 
 | Command | What it does |
 |---|---|
-| `poll` | Records live traffic in both directions. Does nothing on days left out of `DAYS` (every day is tracked by default). |
-| `poll --force` | Records both directions even when today isn't in `DAYS`. |
+| `poll` | Records live traffic in both directions. Does nothing in `QUIET_HOURS` (00:00–07:30) or on days left out of `DAYS` (every day is tracked by default). |
+| `poll --force` | Records both directions regardless of the day or the quiet hours. |
 | `predict` | Asks for Google's traffic prediction at every 15-minute slot in the windows on each tracked day over the next 7 days (about 126 API calls). Rows are stored as `predicted`. |
 | `report [--source live\|predicted\|all]` | Writes `commute_heatmap.png` and prints the best 3 departure slots, the worst slot, the average congestion index and the most common routes for each direction. Defaults to `live`. |
 | `dashboard` | Writes `commute_dashboard.html`, an interactive page you open in a browser. It shows both directions side by side: the best time to leave home and the office, drive time by departure slot, a weekday heatmap, a day-by-day trend and the routes taken, with filters for period, weekdays or weekends, and live or forecast data. The page is built from `dashboard_template.html` with your trips embedded, so it works offline. |
@@ -118,11 +121,11 @@ The congestion index in the report is `duration_s / static_s`: 1.5 means the dri
 
 ## Costs and limits
 
-- **Routes API.** Scheduled polling makes 192 calls a day (96 runs × 2 directions), about
-  5,800 a month, and the Sunday forecast adds about 126 a week, for roughly 6,300 a month.
-  The Pro tier includes 5,000 free requests a month and then costs $10 per 1,000, so expect
-  about $13 a month. Tracking weekdays only (`DAYS = {0, 1, 2, 3, 4}`) brings it back under
-  the free amount. Requests use `TRAFFIC_AWARE_OPTIMAL`,
+- **Routes API.** Scheduled polling makes 132 calls a day (66 runs × 2 directions), about
+  4,000 a month, and the Sunday forecast adds about 126 a week, for roughly 4,500 a month.
+  That fits inside the 5,000 free requests a month on the Pro tier; past that, Google charges
+  $10 per 1,000, so extra `predict` runs or a shorter `QUIET_HOURS` can push it over.
+  Requests use `TRAFFIC_AWARE_OPTIMAL`,
   Google's most accurate traffic mode (set by `ROUTING_PREFERENCE` in the script). It is
   billed at the Routes API's Pro rate, the same as `TRAFFIC_AWARE`, which is higher than
   basic routing. Check the current
@@ -130,9 +133,9 @@ The congestion index in the report is `duration_s / static_s`: 1.5 means the dri
   and its free monthly allowance.
 - **GitHub Actions minutes.** Public repos don't use up minutes. A private repo on the
   Free plan gets 2,000 a month, with each job billed as at least one minute, and this
-  schedule needs nearly 6,000 (a recording job and a dashboard job per run), so a private
+  schedule needs about 4,000 (a recording job and a dashboard job per run), so a private
   repo would need a paid plan or a slower schedule.
-- **Repository size.** Every recorded run commits `commute.db`, about 96 commits a day.
+- **Repository size.** Every recorded run commits `commute.db`, about 66 commits a day.
   Expect the repository to grow by a few hundred megabytes a year.
 
 ## Troubleshooting

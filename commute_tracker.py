@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Commute traffic tracker for Lahore.
 
-Records driving times with live traffic (Google Routes API) into SQLite around the
-clock every day, and suggests the best time to leave inside each commute window.
+Records driving times with live traffic (Google Routes API) into SQLite every 15 minutes
+outside the quiet hours, every day, and suggests the best time to leave inside each
+commute window.
 
 Commands:
     poll [--force]                       record live traffic in both directions
@@ -35,11 +36,13 @@ HOME = "Shayyan Furniture, Chah Miran, Lahore, Pakistan"
 OFFICE = "04 Old FCC Road, Lahore, Pakistan"
 
 TZ = ZoneInfo("Asia/Karachi")
-# Traffic is recorded all day; these windows only decide where departure times are suggested.
+# Traffic is recorded all day outside QUIET_HOURS; these windows only decide where departure
+# times are suggested.
 MORNING_WINDOW = (dtime(9, 0), dtime(11, 0))  # leaving home
 EVENING_WINDOW = (dtime(19, 0), dtime(21, 0))  # leaving the office
 SLOT_MINUTES = 15
 DAYS = {0, 1, 2, 3, 4, 5, 6}  # days to record and forecast (Monday = 0): every day
+QUIET_HOURS = (dtime(0, 0), dtime(7, 30))  # no recording from 00:00 until 07:30
 PREDICT_DAYS = 7
 # TRAFFIC_AWARE_OPTIMAL is Google's most accurate traffic mode; TRAFFIC_AWARE skips some of
 # the traffic calculation to answer faster. Both are billed at the same (Pro) rate.
@@ -87,6 +90,12 @@ def window_slots(day: date, window: tuple[dtime, dtime]) -> list[datetime]:
         slots.append(slot)
         slot += timedelta(minutes=SLOT_MINUTES)
     return slots
+
+
+def in_quiet_hours(now: datetime) -> bool:
+    start, end = QUIET_HOURS
+    t = now.time()
+    return start <= t < end if start <= end else (t >= start or t < end)
 
 
 def rfc3339_utc(dt: datetime) -> str:
@@ -253,9 +262,13 @@ def record(
 # --------------------------------------------------------------------------
 def cmd_poll(force: bool) -> int:
     now = now_local()
-    if now.weekday() not in DAYS and not force:
-        log.info("%s is not a tracked day; nothing to record", now.strftime("%a %H:%M"))
-        return 0
+    if not force:
+        if now.weekday() not in DAYS:
+            log.info("%s is not a tracked day; nothing to record", now.strftime("%a %H:%M"))
+            return 0
+        if in_quiet_hours(now):
+            log.info("%s is in the quiet hours; nothing to record", now.strftime("%a %H:%M"))
+            return 0
     directions = list(DIRECTIONS)
 
     api_key = get_api_key()
@@ -435,6 +448,7 @@ def cmd_dashboard() -> int:
         "windows": {d: [w[0].strftime("%H:%M"), w[1].strftime("%H:%M")] for d, (_, _, w) in DIRECTIONS.items()},
         "routing": ROUTING_PREFERENCE,
         "days": sorted(DAYS),
+        "quiet": [QUIET_HOURS[0].strftime("%H:%M"), QUIET_HOURS[1].strftime("%H:%M")],
         "trips": trips,
     }
 
@@ -462,7 +476,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Record and analyse Lahore commute times.")
     commands = parser.add_subparsers(dest="command", required=True)
     poll = commands.add_parser("poll", help="record live traffic in both directions")
-    poll.add_argument("--force", action="store_true", help="record even if today is not in DAYS")
+    poll.add_argument("--force", action="store_true", help="record even on untracked days or in the quiet hours")
     commands.add_parser("predict", help=f"record predicted traffic for the next {PREDICT_DAYS} days")
     report = commands.add_parser("report", help="build the heatmap and print a summary")
     report.add_argument("--source", choices=["live", "predicted", "all"], default="live")

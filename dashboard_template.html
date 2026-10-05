@@ -264,7 +264,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     <div>
       <p class="eyebrow">Lahore commute · PKT (UTC+5)</p>
       <h1>When to leave</h1>
-      <p class="sub">Traffic in both directions is recorded every 15 minutes, all day, every day. The best times to leave come only from your two windows.</p>
+      <p class="sub" id="sub">Traffic in both directions is recorded every 15 minutes, every day. The best times to leave come only from your two windows.</p>
     </div>
     <span class="fresh" id="fresh">No data yet</span>
   </header>
@@ -336,7 +336,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
       <div class="panel-head">
         <div>
           <h3>Through the day</h3>
-          <p>Typical drive time for every departure slot from midnight to midnight.</p>
+          <p>Typical drive time for every recorded departure slot of the day.</p>
         </div>
         <div class="legend" data-role="day-legend"></div>
       </div>
@@ -425,6 +425,14 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   const plural = (n, word) => n + " " + word + (n === 1 ? "" : "s");
   const windowOf = (dir) => (DATA ? DATA.windows[dir].map(toMin) : [0, 0]);
   const windowText = (dir) => (DATA ? DATA.windows[dir].join("–") : "");
+  // Hours the tracker doesn't record (e.g. 00:00-07:30). The all-day views cover only the rest.
+  const QUIET = DATA && DATA.quiet ? DATA.quiet.map(toMin) : null;
+  const isActive = (min) => {
+    if (!QUIET || QUIET[0] === QUIET[1]) return true;
+    const [qs, qe] = QUIET;
+    return qs < qe ? !(min >= qs && min < qe) : !(min >= qs || min < qe);
+  };
+  const DAY0 = QUIET && QUIET[0] === 0 ? QUIET[1] : 0;  // start of the recorded day
   function quantile(sorted, q) {
     if (!sorted.length) return NaN;
     const pos = (sorted.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
@@ -800,7 +808,8 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     const W = Math.max(280, box.clientWidth || 520), H = W < 480 ? 220 : 240;
     const M = { l: 36, r: 12, t: 28, b: 28 };
     const iw = W - M.l - M.r, ih = H - M.t - M.b;
-    const x = (m) => M.l + (m / 1440) * iw;
+    const span = 1440 - DAY0;
+    const x = (m) => M.l + ((m - DAY0) / span) * iw;
     const emptyMed = stats(rows.filter((r) => r.sm).map((r) => r.sm)).med;
     const vals = pts.flatMap((p) => [p.p10, p.p90]);
     if (!Number.isNaN(emptyMed)) vals.push(emptyMed);
@@ -820,9 +829,13 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
       svgEl("text", { class: "tick", x: M.l - 6, y: y(t), "text-anchor": "end", dy: "0.32em" }, root).textContent = String(t);
     }
     svgEl("line", { class: "axis", x1: M.l, x2: W - M.r, y1: M.t + ih, y2: M.t + ih }, root);
-    const step = iw / 8 >= 52 ? 180 : 360;
-    for (let m = 0; m <= 1440; m += step) {
-      const anchor = m === 0 ? "start" : m === 1440 ? "end" : "middle";
+    const step = iw / (span / 180) >= 52 ? 180 : 360;
+    const firstTick = Math.ceil(DAY0 / step) * step;
+    if (DAY0 % step && x(firstTick) - x(DAY0) >= 56) {
+      svgEl("text", { class: "tick", x: x(DAY0), y: H - 8, "text-anchor": "start" }, root).textContent = hhmm(DAY0);
+    }
+    for (let m = firstTick; m <= 1440; m += step) {
+      const anchor = m === DAY0 ? "start" : m === 1440 ? "end" : "middle";
       svgEl("text", { class: "tick", x: x(m), y: H - 8, "text-anchor": anchor }, root).textContent = m === 1440 ? "24:00" : hhmm(m);
     }
     if (!Number.isNaN(emptyMed)) {
@@ -870,7 +883,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     }
     hit.addEventListener("pointermove", (e) => {
       const b = root.getBoundingClientRect();
-      const m = ((((e.clientX - b.left) / b.width) * W - M.l) / iw) * 1440;
+      const m = DAY0 + ((((e.clientX - b.left) / b.width) * W - M.l) / iw) * span;
       let bi = 0;
       pts.forEach((p, i) => { if (Math.abs(p.slot - m) < Math.abs(pts[bi].slot - m)) bi = i; });
       showSlot(bi, e.clientX, e.clientY);
@@ -895,7 +908,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     el["heat-sub"].textContent = "Typical minutes for each weekday and hour of the day, from every recorded " +
       (state.src === "both" ? "live reading." : "trip.");
     if (!pr.length) { grid.style.gridTemplateColumns = "1fr"; emptyState(grid, "The week view fills in as trips are recorded."); return; }
-    const hours = Array.from({ length: 24 }, (_, h) => h);
+    const hours = Array.from({ length: 24 }, (_, h) => h).filter((h) => [0, 15, 30, 45].some((q) => isActive(h * 60 + q)));
     const [ws, we] = windowOf(dir);
     const winHours = new Set();
     for (let m = ws; m <= we; m += SLOT) winHours.add(Math.floor(m / 60));
@@ -909,7 +922,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     const minSpan = Math.max(4, lo * 0.25);
     if (hi - lo < minSpan) hi = lo + minSpan;
 
-    grid.style.gridTemplateColumns = "36px repeat(24, minmax(16px, 1fr))";
+    grid.style.gridTemplateColumns = "36px repeat(" + hours.length + ", minmax(18px, 1fr))";
     // marker row: a bar over the hours that hold your window's departure slots, labelled at
     // its start (or at its end for a late window, so the label stays inside the grid)
     const firstWin = Math.min(...winHours), lastWin = Math.max(...winHours);
@@ -1121,9 +1134,9 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
       const el = cols[dir];
       const primary = srcs.includes("live") && rows.some((r) => r.src === "live") ? "live" : (srcs[0] || "live");
       renderCard(dir, el, rows, primary);
-      renderDay(dir, el, filtered(dir, true).filter((r) => r.src === primary));
+      renderDay(dir, el, filtered(dir, true).filter((r) => r.src === primary && isActive(r.min)));
       renderProfile(dir, el, rows, srcs);
-      renderHeat(dir, el, filtered(dir, true), primary);
+      renderHeat(dir, el, filtered(dir, true).filter((r) => isActive(r.min)), primary);
       renderDaily(dir, el, rows, srcs);
       renderRoutes(el, rows.filter((r) => r.src === primary));
     }
@@ -1133,6 +1146,10 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   if (!DATA) {
     $("fresh").textContent = "No data embedded";
     return;
+  }
+  if (QUIET && QUIET[0] !== QUIET[1]) {
+    $("sub").textContent = "Traffic in both directions is recorded every 15 minutes, every day, except " + DATA.quiet[0] + "–" + DATA.quiet[1] +
+      ". The best times to leave come only from your two windows.";
   }
   const lastLive = latestOf(trips.filter((t) => t.src === "live"));
   $("fresh").textContent = lastLive

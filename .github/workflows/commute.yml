@@ -2,9 +2,8 @@ name: Commute tracker
 
 on:
   schedule:
-    # Every 15 minutes, all day. Cron is in UTC (Lahore is UTC+5), so Sunday-Friday UTC
-    # covers Monday 00:00 to Friday 23:45 in Lahore; the script skips non-workdays itself.
-    - cron: "*/15 * * * 0-5"
+    # Every 15 minutes, all day, every day (cron is in UTC; Lahore is UTC+5).
+    - cron: "*/15 * * * *"
     # Sunday 20:20 in Lahore: Google's traffic forecast for the coming week's windows.
     - cron: "20 15 * * 0"
   workflow_dispatch:

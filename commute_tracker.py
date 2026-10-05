@@ -2,10 +2,10 @@
 """Commute traffic tracker for Lahore.
 
 Records driving times with live traffic (Google Routes API) into SQLite around the
-clock on workdays, and suggests the best time to leave inside each commute window.
+clock every day, and suggests the best time to leave inside each commute window.
 
 Commands:
-    poll [--force]                       record live traffic in both directions (workdays)
+    poll [--force]                       record live traffic in both directions
     predict                              record predicted traffic for the next week
     report [--source live|predicted|all] build commute_heatmap.png and print a summary
     dashboard                            build commute_dashboard.html, an interactive page of trends
@@ -39,7 +39,7 @@ TZ = ZoneInfo("Asia/Karachi")
 MORNING_WINDOW = (dtime(9, 0), dtime(11, 0))  # leaving home
 EVENING_WINDOW = (dtime(19, 0), dtime(21, 0))  # leaving the office
 SLOT_MINUTES = 15
-WORKDAYS = {0, 1, 2, 3, 4}  # days to record, Mon-Fri (Monday = 0)
+DAYS = {0, 1, 2, 3, 4, 5, 6}  # days to record and forecast (Monday = 0): every day
 PREDICT_DAYS = 7
 # TRAFFIC_AWARE_OPTIMAL is Google's most accurate traffic mode; TRAFFIC_AWARE skips some of
 # the traffic calculation to answer faster. Both are billed at the same (Pro) rate.
@@ -253,8 +253,8 @@ def record(
 # --------------------------------------------------------------------------
 def cmd_poll(force: bool) -> int:
     now = now_local()
-    if now.weekday() not in WORKDAYS and not force:
-        log.info("%s is not a workday; nothing to record", now.strftime("%a %H:%M"))
+    if now.weekday() not in DAYS and not force:
+        log.info("%s is not a tracked day; nothing to record", now.strftime("%a %H:%M"))
         return 0
     directions = list(DIRECTIONS)
 
@@ -275,14 +275,14 @@ def cmd_predict() -> int:
     jobs = []
     for offset in range(PREDICT_DAYS + 1):
         day = now.date() + timedelta(days=offset)
-        if day.weekday() not in WORKDAYS:
+        if day.weekday() not in DAYS:
             continue
         for direction, (_, _, window) in DIRECTIONS.items():
             jobs += [(direction, s) for s in window_slots(day, window) if earliest <= s <= horizon]
     jobs.sort(key=lambda job: job[1])
 
     if not jobs:
-        log.info("No workday slots in the next %d days", PREDICT_DAYS)
+        log.info("No tracked days in the next %d days", PREDICT_DAYS)
         return 0
 
     api_key = get_api_key()
@@ -339,7 +339,7 @@ def cmd_report(source: str) -> int:
         sub = df[df["direction"] == direction]
         window = DIRECTIONS[direction][2]
         slots = [s.strftime("%H:%M") for s in window_slots(now_local().date(), window)]
-        days = sorted(WORKDAYS | set(sub["weekday"]))
+        days = sorted(DAYS | set(sub["weekday"]))
         grid = sub.pivot_table(index="weekday", columns="slot", values="minutes", aggfunc="median")
         grid = grid.reindex(index=days, columns=slots)
 
@@ -434,6 +434,7 @@ def cmd_dashboard() -> int:
         "slotMinutes": SLOT_MINUTES,
         "windows": {d: [w[0].strftime("%H:%M"), w[1].strftime("%H:%M")] for d, (_, _, w) in DIRECTIONS.items()},
         "routing": ROUTING_PREFERENCE,
+        "days": sorted(DAYS),
         "trips": trips,
     }
 
@@ -460,8 +461,8 @@ def cmd_dashboard() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Record and analyse Lahore commute times.")
     commands = parser.add_subparsers(dest="command", required=True)
-    poll = commands.add_parser("poll", help="record live traffic in both directions on a workday")
-    poll.add_argument("--force", action="store_true", help="record even if today is not a workday")
+    poll = commands.add_parser("poll", help="record live traffic in both directions")
+    poll.add_argument("--force", action="store_true", help="record even if today is not in DAYS")
     commands.add_parser("predict", help=f"record predicted traffic for the next {PREDICT_DAYS} days")
     report = commands.add_parser("report", help="build the heatmap and print a summary")
     report.add_argument("--source", choices=["live", "predicted", "all"], default="live")

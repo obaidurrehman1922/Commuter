@@ -3,12 +3,12 @@
 Finds the best time to leave for the daily drive between home (Shayyan Furniture, Chah Miran)
 and the office (04 Old FCC Road) in Lahore.
 A GitHub Actions job asks the Google Routes API for the drive time with live traffic in both
-directions every 15 minutes, all day, on workdays, and stores each result in `commute.db`
+directions every 15 minutes, all day, every day, and stores each result in `commute.db`
 (SQLite), which is committed back to this repo. After each new trip the workflow rebuilds an interactive
 dashboard and publishes it with GitHub Pages at
 <https://obaidurrehman1922.github.io/Commuter/>.
 
-| Direction | Window (Lahore time, Mon–Fri) |
+| Direction | Window (Lahore time, every day) |
 |---|---|
 | Home → Office (`to_office`) | 09:00–11:00 |
 | Office → Home (`to_home`) | 19:00–21:00 |
@@ -26,7 +26,7 @@ suggestions and heatmap also cover only the windows.
 ## Setup
 
 1. **Check the addresses.** `HOME` and `OFFICE` are at the top of `commute_tracker.py`,
-   along with the windows, slot length, workdays and time zone. After the first run, check
+   along with the windows, slot length, the days to track (`DAYS`) and time zone. After the first run, check
    that the distance in the log matches the route in Google Maps. If Google placed an
    address in the wrong spot, make the address more specific.
 2. **Get a Google Maps API key.**
@@ -40,10 +40,10 @@ suggestions and heatmap also cover only the windows.
 5. **Turn on GitHub Pages.** Open *Settings → Pages* and under *Build and deployment* set
    *Source* to **GitHub Actions**. On a free GitHub plan, Pages only works while the repo
    is public.
-6. **Check that it works.** Open *Actions → Commute tracker → Run workflow*. On a workday
-   the *Record commute time* step logs `Recorded 2 of 2 live trip(s)` and a
-   `Record commute times …` commit appears; on a weekend it logs `not a workday`. Either
-   way, a manual run also publishes the dashboard, and the *pages* job shows its link.
+6. **Check that it works.** Open *Actions → Commute tracker → Run workflow*. The *Record
+   commute time* step logs `Recorded 2 of 2 live trip(s)` and a `Record commute times …`
+   commit appears. A manual run also publishes the dashboard, and the *pages* job shows its
+   link.
 
 ### Dashboard website
 
@@ -56,16 +56,15 @@ The site is public: anyone with the link can see your drive times, departure tim
 roads Google chose. It doesn't include your addresses, and it asks search engines not to
 index it.
 
-The workflow's cron schedule is in UTC (Lahore is UTC+5). It fires every 15 minutes from
-Sunday to Friday UTC, which covers Monday 00:00 to Friday 23:45 in Lahore, and the script
-skips any run that doesn't fall on a Lahore workday. GitHub often starts scheduled runs a few
+The workflow fires every 15 minutes, every day (its cron schedule is in UTC; Lahore is
+UTC+5). To skip some days, remove them from `DAYS` in the script. GitHub often starts scheduled runs a few
 minutes late; each trip is grouped into the 15-minute slot it actually left in, so a run that
 starts at 10:37 counts as the 10:30 slot. Under heavy load GitHub can also skip runs entirely.
 
 ### Google's forecast
 
 Every Sunday at 20:20 Lahore time the workflow runs `predict` instead of `poll`. It stores
-Google's traffic forecast for every slot in both windows on the coming week's workdays, which
+Google's traffic forecast for every slot in both windows on each day of the coming week, which
 fills the dashboard's *Google forecast* view. To refresh it at another time, open *Actions →
 Commute tracker → Run workflow* and choose `predict`.
 
@@ -84,17 +83,17 @@ python commute_tracker.py report --source predicted
 
 | Command | What it does |
 |---|---|
-| `poll` | Records live traffic in both directions. Does nothing on days outside `WORKDAYS` (weekends by default). |
-| `poll --force` | Records both directions even when today isn't a workday. |
-| `predict` | Asks for Google's traffic prediction at every 15-minute slot in the windows on each workday over the next 7 days (about 90 API calls). Rows are stored as `predicted`. |
+| `poll` | Records live traffic in both directions. Does nothing on days left out of `DAYS` (every day is tracked by default). |
+| `poll --force` | Records both directions even when today isn't in `DAYS`. |
+| `predict` | Asks for Google's traffic prediction at every 15-minute slot in the windows on each tracked day over the next 7 days (about 126 API calls). Rows are stored as `predicted`. |
 | `report [--source live\|predicted\|all]` | Writes `commute_heatmap.png` and prints the best 3 departure slots, the worst slot, the average congestion index and the most common routes for each direction. Defaults to `live`. |
-| `dashboard` | Writes `commute_dashboard.html`, an interactive page you open in a browser. It shows both directions side by side: the best time to leave home and the office, drive time by departure slot, a weekday heatmap, a day-by-day trend and the routes taken, with filters for period and live or forecast data. The page is built from `dashboard_template.html` with your trips embedded, so it works offline. |
+| `dashboard` | Writes `commute_dashboard.html`, an interactive page you open in a browser. It shows both directions side by side: the best time to leave home and the office, drive time by departure slot, a weekday heatmap, a day-by-day trend and the routes taken, with filters for period, weekdays or weekends, and live or forecast data. The page is built from `dashboard_template.html` with your trips embedded, so it works offline. |
 
 `predict` gives you a heatmap straight away (the workflow also runs it every Sunday). The
 live data from the scheduled job takes a few weeks to become reliable.
 
 **Avoid conflicts on `commute.db`.** The workflow commits `commute.db` every 15 minutes
-on workdays, and git can't merge two versions of a binary file. If you keep local
+every day, and git can't merge two versions of a binary file. If you keep local
 changes (for example from `predict`), pull just before running, then commit and push right
 away. Otherwise discard them with `git checkout -- commute.db`. Running `report` doesn't
 change the database.
@@ -119,11 +118,11 @@ The congestion index in the report is `duration_s / static_s`: 1.5 means the dri
 
 ## Costs and limits
 
-- **Routes API.** Scheduled polling makes 192 calls per workday (96 runs × 2 directions),
-  about 4,200 a month, and the Sunday forecast adds about 90 a week, for roughly 4,600 to
-  4,900 a month. That fits inside the 5,000 free requests a month on the Pro tier, with
-  little to spare; past that, Google charges $10 per 1,000. Extra `predict` runs or recording
-  weekends too (add 5 and 6 to `WORKDAYS`) will go over. Requests use `TRAFFIC_AWARE_OPTIMAL`,
+- **Routes API.** Scheduled polling makes 192 calls a day (96 runs × 2 directions), about
+  5,800 a month, and the Sunday forecast adds about 126 a week, for roughly 6,300 a month.
+  The Pro tier includes 5,000 free requests a month and then costs $10 per 1,000, so expect
+  about $13 a month. Tracking weekdays only (`DAYS = {0, 1, 2, 3, 4}`) brings it back under
+  the free amount. Requests use `TRAFFIC_AWARE_OPTIMAL`,
   Google's most accurate traffic mode (set by `ROUTING_PREFERENCE` in the script). It is
   billed at the Routes API's Pro rate, the same as `TRAFFIC_AWARE`, which is higher than
   basic routing. Check the current
@@ -131,9 +130,9 @@ The congestion index in the report is `duration_s / static_s`: 1.5 means the dri
   and its free monthly allowance.
 - **GitHub Actions minutes.** Public repos don't use up minutes. A private repo on the
   Free plan gets 2,000 a month, with each job billed as at least one minute, and this
-  schedule needs over 4,000 (a recording job and a dashboard job per run), so a private
+  schedule needs nearly 6,000 (a recording job and a dashboard job per run), so a private
   repo would need a paid plan or a slower schedule.
-- **Repository size.** Every recorded run commits `commute.db`, about 96 commits a workday.
+- **Repository size.** Every recorded run commits `commute.db`, about 96 commits a day.
   Expect the repository to grow by a few hundred megabytes a year.
 
 ## Troubleshooting

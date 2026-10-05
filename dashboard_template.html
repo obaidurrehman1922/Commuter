@@ -264,7 +264,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     <div>
       <p class="eyebrow">Lahore commute · PKT (UTC+5)</p>
       <h1>When to leave</h1>
-      <p class="sub">Traffic in both directions is recorded every 15 minutes, all day, on workdays. The best times to leave come only from your two windows.</p>
+      <p class="sub">Traffic in both directions is recorded every 15 minutes, all day, every day. The best times to leave come only from your two windows.</p>
     </div>
     <span class="fresh" id="fresh">No data yet</span>
   </header>
@@ -274,6 +274,11 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
       <button type="button" id="period-7" data-v="7">7 days</button>
       <button type="button" id="period-30" data-v="30">30 days</button>
       <button type="button" id="period-all" data-v="all">All</button>
+    </div>
+    <div class="seg" role="group" aria-label="Days" id="f-days">
+      <button type="button" id="days-weekdays" data-v="weekdays">Weekdays</button>
+      <button type="button" id="days-weekends" data-v="weekends">Weekends</button>
+      <button type="button" id="days-all" data-v="all">All days</button>
     </div>
     <div class="seg" role="group" aria-label="Data" id="f-src">
       <button type="button" id="src-live" data-v="live">Live</button>
@@ -361,7 +366,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
       <div class="panel-head">
         <div>
           <h3>Day by day</h3>
-          <p>Each workday’s typical drive time, with the band from its fastest to slowest trip.</p>
+          <p>Each day’s typical drive time, with the band from its fastest to slowest trip.</p>
         </div>
         <div class="legend" data-role="daily-legend"></div>
       </div>
@@ -514,6 +519,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   try { saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; } catch (e) { saved = {}; }
   const state = {
     period: ["7", "30", "all"].includes(saved.period) ? saved.period : "all",
+    days: ["weekdays", "weekends", "all"].includes(saved.days) ? saved.days : "all",
     src: ["live", "predicted", "both"].includes(saved.src) ? saved.src : (hasSrc("live") ? "live" : "predicted"),
   };
   if (state.src !== "live" && !hasSrc("predicted")) state.src = "live";
@@ -523,6 +529,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   function selectedSources() {
     return (state.src === "both" ? ["live", "predicted"] : [state.src]).filter(hasSrc);
   }
+  const dayMatch = (wd) => state.days === "all" || (state.days === "weekends" ? wd >= 5 : wd < 5);
   function inWindow(t) {
     const [ws, we] = windowOf(t.dir);
     const s = slotOf(t.min);
@@ -531,7 +538,8 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
   function filtered(dir, allDay) {
     const cutoff = state.period === "all" || !genDate ? null : addDays(genDate, -(Number(state.period) - 1));
     const srcs = selectedSources();
-    return trips.filter((t) => (!dir || t.dir === dir) && srcs.includes(t.src) && (!cutoff || t.date >= cutoff) && (allDay || inWindow(t)));
+    return trips.filter((t) => (!dir || t.dir === dir) && srcs.includes(t.src) && (!cutoff || t.date >= cutoff) &&
+      dayMatch(t.wd) && (allDay || inWindow(t)));
   }
 
   // ---------- columns ----------
@@ -601,12 +609,12 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
       setStat(el.delay, (delay < 0 ? "−" : "+") + f1(Math.abs(delay)) + " min", f1(stats(withEmpty.map((r) => r.sm)).med) + " min empty");
     } else setStat(el.delay, "—");
     const days = new Set(pr.map((r) => r.date)).size;
-    setStat(el.trips, String(pr.length), plural(days, primary === "live" ? "workday" : "forecast day"));
+    setStat(el.trips, String(pr.length), plural(days, primary === "live" ? "day" : "forecast day"));
 
     if (primary === "predicted") setPill(el.confidence, "info", "Google’s forecast, not measured");
-    else if (days < 5) setPill(el.confidence, "warn", "Early estimate · " + plural(days, "workday"));
-    else if (days < 15) setPill(el.confidence, "warn", "Firming up · " + days + " workdays");
-    else setPill(el.confidence, "good", "Reliable · " + days + " workdays");
+    else if (days < 5) setPill(el.confidence, "warn", "Early estimate · " + plural(days, "day"));
+    else if (days < 15) setPill(el.confidence, "warn", "Firming up · " + days + " days");
+    else setPill(el.confidence, "good", "Reliable · " + days + " days");
   }
 
   // ---------- departure-time profile ----------
@@ -636,7 +644,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     box.replaceChildren();
     legendFor(el["profile-legend"], srcs, rows.length ? "Middle 80%" : null, rows.some((r) => r.sm) ? "Empty roads" : null);
     if (!rows.length) {
-      emptyState(box, "No trips " + DIR_META[dir].leaving + " in this view yet. The tracker records them every 15 minutes on workdays between " + DATA.windows[dir][0] + " and " + DATA.windows[dir][1] + ".");
+      emptyState(box, "No trips " + DIR_META[dir].leaving + " in this view yet. The tracker records them every 15 minutes between " + DATA.windows[dir][0] + " and " + DATA.windows[dir][1] + ".");
       return;
     }
     const W = Math.max(280, box.clientWidth || 520);
@@ -891,7 +899,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     const [ws, we] = windowOf(dir);
     const winHours = new Set();
     for (let m = ws; m <= we; m += SLOT) winHours.add(Math.floor(m / 60));
-    const days = [...new Set([0, 1, 2, 3, 4, ...pr.map((r) => r.wd)])].sort((a, b) => a - b);
+    const days = [...new Set([...(DATA.days || [0, 1, 2, 3, 4]).filter(dayMatch), ...pr.map((r) => r.wd)])].sort((a, b) => a - b);
     const cells = new Map();
     for (const [k, rs] of groupBy(pr, (r) => r.wd + "|" + Math.floor(r.min / 60))) cells.set(k, stats(rs.map((r) => r.m)));
     const meds = [...cells.values()].map((c) => c.med);
@@ -949,7 +957,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     const box = el.daily;
     box.replaceChildren();
     legendFor(el["daily-legend"], srcs, rows.length ? "Fastest to slowest" : null, null);
-    if (!rows.length) { emptyState(box, "Each workday adds a point here."); return; }
+    if (!rows.length) { emptyState(box, "Each day adds a point here."); return; }
     const series = srcs.map((src) => {
       const by = groupBy(rows.filter((r) => r.src === src), (r) => r.date);
       const pts = [...by.entries()].map(([date, rs]) => {
@@ -1037,7 +1045,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
       else if (e.key === "ArrowLeft") { showDay(idx - 1); e.preventDefault(); }
       else if (e.key === "Escape") clear();
     });
-    if (dates.length < 3) node("p", "note", "The trend line appears once there are a few workdays of data.", box);
+    if (dates.length < 3) node("p", "note", "The trend line appears once there are a few days of data.", box);
   }
 
   // ---------- routes ----------
@@ -1085,7 +1093,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
 
   // ---------- controls ----------
   function syncControls() {
-    for (const [group, key] of [["f-period", "period"], ["f-src", "src"]]) {
+    for (const [group, key] of [["f-period", "period"], ["f-days", "days"], ["f-src", "src"]]) {
       for (const b of $(group).querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.v === state[key]));
     }
     const noForecast = !hasSrc("predicted"), noLive = !hasSrc("live");
@@ -1094,7 +1102,7 @@ code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; back
     $("src-live").disabled = noLive;
     $("filter-note").textContent = noForecast ? "Google’s forecast for the coming week is added every Sunday evening." : "";
   }
-  for (const [group, key] of [["f-period", "period"], ["f-src", "src"]]) {
+  for (const [group, key] of [["f-period", "period"], ["f-days", "days"], ["f-src", "src"]]) {
     $(group).addEventListener("click", (e) => {
       const b = e.target.closest("button");
       if (!b || b.disabled || state[key] === b.dataset.v) return;
